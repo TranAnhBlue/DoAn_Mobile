@@ -34,13 +34,39 @@ export default function LoginScreen({ navigation }) {
         identifier,
         password,
       });
-      
-      setCredentials(data.data, data.data.token);
-      Alert.alert('Thành công', 'Đăng nhập thành công!');
+
+      const raw = data.data;
+      const token = raw?.accessToken || raw?.token;
+
+      if (!token) {
+        Alert.alert('Lỗi', 'Không nhận được token từ server. Vui lòng thử lại.');
+        setLoading(false);
+        return;
+      }
+
+      // Normalize các field để khớp với toàn bộ app
+      // API trả về: fullName, roles[], avatarUrl, phoneNumber
+      // App dùng:   fullname, role,    avatar,    phone
+      const rawRole = Array.isArray(raw.roles) ? raw.roles[0] : (raw.role || '');
+      const roleMap = { FARMER: 'Farmer', ADMIN: 'Admin', HTX: 'HTX', USER: 'User' };
+      const userData = {
+        id:           raw.userId,
+        username:     raw.email,
+        fullname:     raw.fullName,
+        email:        raw.email,
+        phone:        raw.phoneNumber,
+        avatar:       raw.avatarUrl,
+        role:         roleMap[rawRole?.toUpperCase()] || rawRole,
+        roles:        raw.roles,
+        organization: raw.organization || null,
+        province:     raw.province || null,
+      };
+
+      await setCredentials(userData, token);
+      setLoading(false);
     } catch (error) {
       const errorMsg = error.response?.data?.message || 'Đăng nhập thất bại. Vui lòng thử lại.';
       Alert.alert('Lỗi', errorMsg);
-    } finally {
       setLoading(false);
     }
   };

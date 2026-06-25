@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -32,32 +33,11 @@ export default function ProfileScreen() {
       color: '#06b6d4',
     },
     {
-      icon: 'shopping-bag',
-      title: 'Xin cấp vật tư',
-      subtitle: 'Đăng ký yêu cầu vật tư',
-      onPress: () => navigation.navigate('Supply'),
-      color: '#ef4444',
-    },
-    {
-      icon: 'award',
-      title: 'Tiêu chuẩn TCVN',
-      subtitle: 'Quy chuẩn kỹ thuật quốc gia',
-      onPress: () => navigation.navigate('TCVN'),
-      color: '#f59e0b',
-    },
-    {
       icon: 'bell',
       title: 'Thông báo',
       subtitle: 'Xem thông báo hệ thống',
       onPress: () => navigation.navigate('Notifications'),
       color: '#8b5cf6',
-    },
-    {
-      icon: 'file-text',
-      title: 'Tin tức',
-      subtitle: 'Xem tin tức nông nghiệp',
-      onPress: () => navigation.navigate('NewsList'),
-      color: '#22c55e',
     },
     {
       icon: 'book-open',

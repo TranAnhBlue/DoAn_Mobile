@@ -47,15 +47,31 @@ export default function AccountInfoScreen({ navigation }) {
 
   const updateMutation = useMutation({
     mutationFn: (values) => {
+      // API PUT /users/me/profile ch? nh?n 5 tr??ng:
+      // fullName, phoneNumber, dateOfBirth, gender, address
       const updateData = {
-        ...values,
-        farmArea: values.farmArea === '' ? '' : Number(values.farmArea),
+        fullName:    values.fullname?.trim() || '',
+        phoneNumber: values.phone?.trim()    || '',
+        dateOfBirth: values.dateOfBirth      || null,
+        gender:      values.gender           || '',
+        address:     values.address?.trim()  || '',
       };
-      return api.put('/users/profile', updateData);
+      return api.put('/users/me/profile', updateData);
     },
     onSuccess: async (res) => {
-      const updatedUser = res.data.data;
-      await setUser(updatedUser);
+      // Normalize l?i nh? khi login
+      const raw = res.data?.data;
+      if (raw) {
+        const updated = {
+          ...user,
+          fullname:    raw.fullName    ?? user.fullname,
+          phone:       raw.phoneNumber ?? user.phone,
+          dateOfBirth: raw.dateOfBirth ?? user.dateOfBirth,
+          gender:      raw.gender      ?? user.gender,
+          address:     raw.address     ?? user.address,
+        };
+        await setUser(updated);
+      }
       queryClient.invalidateQueries({ queryKey: ['users'] });
       Alert.alert('Thành công', 'Cập nhật hồ sơ thành công!');
     },
@@ -116,7 +132,7 @@ export default function AccountInfoScreen({ navigation }) {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaType.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -227,21 +243,7 @@ export default function AccountInfoScreen({ navigation }) {
 
         <View style={styles.formSection}>
           <Text style={styles.sectionTitle}>Thông tin cá nhân</Text>
-          
-          {/* Hiển thị HTX liên kết cho Farmer/User và các vai trò HTX */}
-          {(isFarmerLike || ['HTX_TECHNICAL', 'HTX_DISTRIBUTION', 'HTX_ACCOUNTANT', 'HTX_SUPERVISOR'].includes(user?.role?.toUpperCase())) && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>HTX liên kết</Text>
-              <View style={[styles.input, styles.inputDisabled, { justifyContent: 'center' }]}>
-                <Text style={styles.inputDisabled}>
-                  {user?.htxId ? 
-                    (typeof user.htxId === 'object' ? (user.htxId.fullname || user.htxId.username) : user.htxId) 
-                    : 'Chưa liên kết HTX'}
-                </Text>
-              </View>
-            </View>
-          )}
-          
+
           {renderInput({ label: 'Họ và tên *', field: 'fullname', placeholder: 'Ví dụ: Nguyễn Văn A' })}
 
           <View style={styles.inputGroup}>
@@ -254,9 +256,7 @@ export default function AccountInfoScreen({ navigation }) {
             field: 'phone',
             placeholder: 'Ví dụ: 0901234567',
             keyboardType: 'phone-pad',
-            editable: canEditPhone,
           })}
-          {renderInput({ label: 'Tổ chức/Công ty', field: 'organization', placeholder: 'Ví dụ: HTX Nông nghiệp ABC' })}
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Ngày sinh</Text>
@@ -273,35 +273,8 @@ export default function AccountInfoScreen({ navigation }) {
             {renderChoices('gender', GENDERS)}
           </View>
 
-          {renderInput({
-            label: 'Giới thiệu ngắn',
-            field: 'bio',
-            placeholder: 'Ví dụ: Nông dân có 10 năm kinh nghiệm trồng lúa...',
-            multiline: true,
-          })}
-
           <Text style={styles.sectionTitle}>Địa chỉ</Text>
-          {renderInput({ label: 'Tỉnh/Thành phố', field: 'province', placeholder: 'Ví dụ: An Giang, Hà Nội...' })}
-          {renderInput({ label: 'Phường/Xã', field: 'ward', placeholder: 'Ví dụ: Xã Tân Phú...' })}
-          {renderInput({ label: 'Địa chỉ chi tiết', field: 'address', placeholder: 'Ví dụ: 123 Đường ABC' })}
-
-          {isFarmerLike && (
-            <>
-              <Text style={styles.sectionTitle}>Thông tin nông trại</Text>
-              {renderInput({ label: 'Tên nông trại', field: 'farmName', placeholder: 'Ví dụ: Nông trại Xanh' })}
-              {renderInput({ label: 'Mã nông trại', field: 'farmCode', placeholder: 'Ví dụ: NT001' })}
-              {renderInput({
-                label: 'Diện tích (m²)',
-                field: 'farmArea',
-                placeholder: 'Ví dụ: 5000',
-                keyboardType: 'numeric',
-              })}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Loại hình</Text>
-                {renderChoices('farmType', FARM_TYPES)}
-              </View>
-            </>
-          )}
+          {renderInput({ label: 'Địa chỉ chi tiết', field: 'address', placeholder: 'Ví dụ: 123 Đường ABC, Quận 1' })}
         </View>
       </ScrollView>
 

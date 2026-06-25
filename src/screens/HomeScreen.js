@@ -18,11 +18,10 @@ const FARM_DARK = '#27c65a';
 const FARM = '#27c65a';
 
 const ROLE_LABELS = {
-  Admin: 'Quản trị viên',
-  Farmer: 'Nông dân',
-  HTX: 'Hợp tác xã',
-  Htx: 'Hợp tác xã',
-  User: 'Thành viên',
+  Admin:   'Quản trị viên', ADMIN:   'Quản trị viên',
+  Farmer:  'Nông dân',      FARMER:  'Nông dân',
+  HTX:     'Hợp tác xã',   Htx:     'Hợp tác xã',
+  User:    'Thành viên',   USER:    'Thành viên',
 };
 
 export default function HomeScreen({ navigation }) {
@@ -61,14 +60,19 @@ export default function HomeScreen({ navigation }) {
 
   const fetchData = useCallback(async () => {
     try {
-      const [statsRes, notificationsRes] = await Promise.all([
-        api.get('/reports/dashboard-stats'),
-        api.get('/notifications'),
+      // Gọi từng API riêng để 1 lỗi 403 không block toàn bộ
+      const [statsResult, unreadResult] = await Promise.allSettled([
+        api.get('/dashboard/overview'),
+        api.get('/notifications/unread'),
       ]);
 
-      if (statsRes.data?.success) setStats(statsRes.data.data);
-      if (notificationsRes.data?.success) {
-        setUnreadCount(notificationsRes.data.unreadCount || 0);
+      if (statsResult.status === 'fulfilled' && statsResult.value.data?.success) {
+        setStats(statsResult.value.data.data);
+      }
+
+      if (unreadResult.status === 'fulfilled' && unreadResult.value.data?.success) {
+        const unreadList = unreadResult.value.data.data;
+        setUnreadCount(Array.isArray(unreadList) ? unreadList.length : (unreadResult.value.data.unreadCount || 0));
       }
     } catch (error) {
       console.error('Home Screen Fetch Error:', error);
@@ -90,7 +94,9 @@ export default function HomeScreen({ navigation }) {
     fetchData();
   };
 
-  const roleLabel = ROLE_LABELS[user?.role] || user?.role || 'Thành viên';
+  // Lấy role từ field role hoặc roles[] (API trả về cả hai)
+  const userRole = user?.role || (Array.isArray(user?.roles) ? user.roles[0] : user?.roles) || '';
+  const roleLabel = ROLE_LABELS[userRole] || userRole || 'Thành viên';
   const normalizedStats = useMemo(() => ({
     totalJournals: stats?.totalJournals || 0,
     pendingJournals: stats?.pendingJournals ?? stats?.pendingApprovalsCount ?? 0,
