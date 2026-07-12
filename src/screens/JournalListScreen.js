@@ -49,8 +49,9 @@ function StatusBadge({ status, feedback }) {
   );
 }
 
-export default function JournalListScreen({ navigation }) {
+export default function JournalListScreen({ route, navigation }) {
   const user = useAuthStore((state) => state.user);
+  const sourceContext = route?.params?.sourceContext;
 
   // ─── Category State ───
   const [activeGroup, setActiveGroup]     = useState('vietgap');
@@ -188,7 +189,8 @@ export default function JournalListScreen({ navigation }) {
     navigation.navigate('JournalEntry', { 
       schemaId,
       category: activeCategory,
-      group: activeGroup
+      group: activeGroup,
+      sourceContext,
     });
   };
 
@@ -299,6 +301,11 @@ export default function JournalListScreen({ navigation }) {
         <View>
           <Text style={styles.headerTitle}>Sổ nhật ký sản xuất</Text>
           <Text style={styles.headerSub}>{filtered.length} sổ · {user?.fullname || user?.username}</Text>
+          {sourceContext?.title && (
+            <Text style={styles.headerContext} numberOfLines={1}>
+              Ghi theo: {sourceContext.title}
+            </Text>
+          )}
         </View>
         <TouchableOpacity style={styles.createBtn} onPress={() => setSchemaModal(true)}>
           <Feather name="plus" size={22} color="#fff" />
@@ -594,6 +601,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
   headerSub:   { fontSize: 12, color: '#94a3b8', marginTop: 3 },
+  headerContext: { fontSize: 12, color: '#16a34a', marginTop: 3, fontWeight: '700', maxWidth: 250 },
   createBtn: {
     width: 42, height: 42, borderRadius: 21,
     backgroundColor: '#16a34a', justifyContent: 'center', alignItems: 'center',

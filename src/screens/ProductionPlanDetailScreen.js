@@ -71,6 +71,19 @@ export default function ProductionPlanDetailScreen({ route, navigation }) {
     fetchPlanDetail();
   };
 
+  const openJournalForPlan = () => {
+    navigation.navigate('Journals', {
+      sourceContext: {
+        sourceType: 'productionPlan',
+        productionPlanId: plan.id || plan._id || planId,
+        title: plan.planName,
+        cropName: plan.cropName,
+        landPlotName: plan.landPlotName,
+        landPlotId: plan.landPlotId,
+      },
+    });
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -186,6 +199,10 @@ export default function ProductionPlanDetailScreen({ route, navigation }) {
             </View>
             <Text style={styles.progressText}>{plan.completionPercentage || 0}%</Text>
           </View>
+          <TouchableOpacity style={styles.journalActionButton} onPress={openJournalForPlan}>
+            <Feather name="book-open" size={18} color="#fff" />
+            <Text style={styles.journalActionText}>Ghi nhật ký cho kế hoạch</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Stages */}
@@ -379,6 +396,21 @@ const styles = StyleSheet.create({
     color: '#16a34a',
     fontWeight: '900',
     textAlign: 'center',
+  },
+  journalActionButton: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#2563eb',
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  journalActionText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
   },
   stageCard: {
     backgroundColor: '#fff',

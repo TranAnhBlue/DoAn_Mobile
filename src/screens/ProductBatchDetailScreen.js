@@ -176,7 +176,18 @@ export default function ProductBatchDetailScreen({ route, navigation }) {
               <TouchableOpacity
                 style={styles.viewTraceButton}
                 onPress={() =>
-                  navigation.navigate('TraceDetail', { traceCode: batch.traceCode })
+                  navigation.navigate('TraceDetail', {
+                    qrCode: batch.traceCode,
+                    sourceSummary: {
+                      sourceType: 'productBatch',
+                      productBatchId: batch.id || batch._id || batchId,
+                      batchCode: batch.batchCode,
+                      productName: batch.productName,
+                      harvestDate: batch.harvestDate,
+                      farmName: batch.farmName,
+                      certification: batch.certification,
+                    },
+                  })
                 }
               >
                 <Feather name="eye" size={18} color="#fff" />

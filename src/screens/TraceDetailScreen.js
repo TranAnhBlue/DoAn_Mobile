@@ -7,21 +7,22 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
-  SafeAreaView,
   Image,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import api from '../api/api';
 
 export default function TraceDetailScreen({ route, navigation }) {
-  const { qrCode } = route.params;
+  const { qrCode, traceCode, sourceSummary } = route.params || {};
+  const lookupCode = qrCode || traceCode;
   const [journal, setJournal] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchTraceData = async () => {
       try {
-        const res = await api.get(`/journals/qr/${qrCode}`);
+        const res = await api.get(`/journals/qr/${lookupCode}`);
         if (res.data?.success) {
           setJournal(res.data.data);
         } else {
@@ -37,7 +38,7 @@ export default function TraceDetailScreen({ route, navigation }) {
     };
 
     fetchTraceData();
-  }, [navigation, qrCode]);
+  }, [navigation, lookupCode]);
 
   const entrySummary = useMemo(() => {
     if (!journal?.schemaId?.tables) return [];
@@ -78,6 +79,7 @@ export default function TraceDetailScreen({ route, navigation }) {
   const schema = journal.schemaId || {};
   const producer = journal.userId || {};
   const htx = journal.htxJournalId?.htxId;
+  const origin = journal.sourceContext || journal.origin || {};
   const isVerified = ['Verified', 'Locked'].includes(journal.status);
 
   return (
@@ -107,7 +109,7 @@ export default function TraceDetailScreen({ route, navigation }) {
 
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Mã QR</Text>
-            <Text style={styles.infoValue} numberOfLines={1}>{journal.qrCode || qrCode}</Text>
+            <Text style={styles.infoValue} numberOfLines={1}>{journal.qrCode || lookupCode}</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Người sản xuất</Text>
@@ -126,6 +128,70 @@ export default function TraceDetailScreen({ route, navigation }) {
             <Text style={styles.infoValue}>{journal.viewCount || 0}</Text>
           </View>
         </View>
+
+        {(origin.title || origin.landPlotName || journal.taskId || journal.productionPlanId || journal.productBatchId) && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Chuỗi liên kết sản xuất</Text>
+            <View style={styles.chainRow}>
+              <View style={styles.chainIcon}><Feather name="check-square" size={15} color="#2563eb" /></View>
+              <Text style={styles.chainText} numberOfLines={2}>
+                Công việc/kế hoạch: {origin.title || journal.productionPlanId || journal.taskId || 'Đã liên kết'}
+              </Text>
+            </View>
+            {!!origin.landPlotName && (
+              <View style={styles.chainRow}>
+                <View style={styles.chainIcon}><Feather name="map-pin" size={15} color="#16a34a" /></View>
+                <Text style={styles.chainText}>Thửa đất: {origin.landPlotName}</Text>
+              </View>
+            )}
+            <View style={styles.chainRow}>
+              <View style={styles.chainIcon}><Feather name="book-open" size={15} color="#f97316" /></View>
+              <Text style={styles.chainText}>Nhật ký theo dõi: {schema.name || 'Nhật ký sản xuất'}</Text>
+            </View>
+            <View style={styles.chainRow}>
+              <View style={styles.chainIcon}><Feather name="grid" size={15} color="#7c3aed" /></View>
+              <Text style={styles.chainText}>Mã truy xuất: {journal.qrCode || lookupCode}</Text>
+            </View>
+          </View>
+        )}
+
+        {sourceSummary && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Lô sản phẩm truy xuất</Text>
+            {!!sourceSummary.batchCode && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Mã lô</Text>
+                <Text style={styles.infoValue}>{sourceSummary.batchCode}</Text>
+              </View>
+            )}
+            {!!sourceSummary.productName && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Sản phẩm</Text>
+                <Text style={styles.infoValue}>{sourceSummary.productName}</Text>
+              </View>
+            )}
+            {!!sourceSummary.harvestDate && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Ngày thu hoạch</Text>
+                <Text style={styles.infoValue}>
+                  {new Date(sourceSummary.harvestDate).toLocaleDateString('vi-VN')}
+                </Text>
+              </View>
+            )}
+            {!!sourceSummary.farmName && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Nông trại</Text>
+                <Text style={styles.infoValue}>{sourceSummary.farmName}</Text>
+              </View>
+            )}
+            {!!sourceSummary.certification && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Chứng nhận</Text>
+                <Text style={styles.infoValue}>{sourceSummary.certification}</Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {producer.avatar || producer.province || producer.address ? (
           <View style={styles.card}>
@@ -243,6 +309,28 @@ const styles = StyleSheet.create({
   avatarText: { color: '#fff', fontSize: 18, fontWeight: '800' },
   producerName: { fontSize: 15, fontWeight: '800', color: '#1e293b' },
   producerAddress: { fontSize: 12, color: '#64748b', marginTop: 3, lineHeight: 17 },
+  chainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f8fafc',
+  },
+  chainIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chainText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1e293b',
+    fontWeight: '700',
+  },
   timelineItem: { flexDirection: 'row', marginBottom: 16 },
   timelineDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#16a34a', marginTop: 5, marginRight: 12 },
   timelineContent: { flex: 1, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', paddingBottom: 14 },

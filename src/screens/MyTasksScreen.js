@@ -89,6 +89,20 @@ export default function MyTasksScreen({ navigation }) {
     }
   };
 
+  const openJournalForTask = (task) => {
+    navigation.navigate('Journals', {
+      sourceContext: {
+        sourceType: 'task',
+        taskId: task.id || task._id,
+        productionPlanId: task.productionPlanId || task.planId,
+        landPlotId: task.landPlotId,
+        title: task.title,
+        landPlotName: task.landPlotName,
+        dueDate: task.dueDate,
+      },
+    });
+  };
+
   const filteredTasks = filter === 'ALL' 
     ? tasks 
     : tasks.filter(task => task.status === filter);
@@ -143,12 +157,31 @@ export default function MyTasksScreen({ navigation }) {
       )}
 
       {item.status === 'IN_PROGRESS' && (
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.journalButton]}
+            onPress={() => openJournalForTask(item)}
+          >
+            <Feather name="book-open" size={16} color="#fff" />
+            <Text style={styles.actionButtonText}>Ghi nhật ký</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.completeButton]}
+            onPress={() => handleCompleteTask(item.id)}
+          >
+            <Feather name="check" size={16} color="#fff" />
+            <Text style={styles.actionButtonText}>Hoàn thành</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {item.status === 'COMPLETED' && (
         <TouchableOpacity
-          style={[styles.actionButton, styles.completeButton]}
-          onPress={() => handleCompleteTask(item.id)}
+          style={[styles.actionButton, styles.journalButton]}
+          onPress={() => openJournalForTask(item)}
         >
-          <Feather name="check" size={16} color="#fff" />
-          <Text style={styles.actionButtonText}>Hoàn thành</Text>
+          <Feather name="book-open" size={16} color="#fff" />
+          <Text style={styles.actionButtonText}>Ghi nhật ký theo dõi</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -338,10 +371,19 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
   },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   startButton: {
     backgroundColor: '#3b82f6',
   },
+  journalButton: {
+    flex: 1,
+    backgroundColor: '#2563eb',
+  },
   completeButton: {
+    flex: 1,
     backgroundColor: '#16a34a',
   },
   actionButtonText: {

@@ -17,7 +17,7 @@ import api from '../api/api';
 const WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
 export default function JournalEntryScreen({ route, navigation }) {
-  const { schemaId, journalId } = route.params || {};
+  const { schemaId, journalId, sourceContext } = route.params || {};
   const queryClient = useQueryClient();
   const isEditing = !!journalId;
 
@@ -91,6 +91,14 @@ export default function JournalEntryScreen({ route, navigation }) {
         entries: data,
         status,
       };
+
+      if (sourceContext) {
+        payload.sourceContext = sourceContext;
+        if (sourceContext.taskId) payload.taskId = sourceContext.taskId;
+        if (sourceContext.productionPlanId) payload.productionPlanId = sourceContext.productionPlanId;
+        if (sourceContext.productBatchId) payload.productBatchId = sourceContext.productBatchId;
+        if (sourceContext.landPlotId) payload.landPlotId = sourceContext.landPlotId;
+      }
 
       if (isEditing) {
         const response = await api.put(`/journals/${journalId}`, payload);
@@ -552,6 +560,25 @@ export default function JournalEntryScreen({ route, navigation }) {
 
       {/* Form Content */}
       <ScrollView style={styles.formContainer} contentContainerStyle={styles.formContent}>
+        {sourceContext && (
+          <View style={styles.sourceCard}>
+            <View style={styles.sourceIcon}>
+              <Feather name="git-branch" size={18} color="#2563eb" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sourceTitle}>Liên kết truy xuất nguồn gốc</Text>
+              <Text style={styles.sourceText} numberOfLines={2}>
+                {sourceContext.title || sourceContext.cropName || 'Nhật ký được ghi từ công việc/kế hoạch'}
+              </Text>
+              {!!sourceContext.landPlotName && (
+                <Text style={styles.sourceMeta} numberOfLines={1}>
+                  Thửa đất: {sourceContext.landPlotName}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
         {currentTable && currentTable.fields && currentTable.fields.length > 0 ? (
           currentTable.isMultiRow ? (
             <View>
@@ -790,6 +817,42 @@ const styles = StyleSheet.create({
   },
   formContent: {
     padding: 16,
+  },
+  sourceCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  sourceIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#dbeafe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sourceTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1e3a8a',
+    marginBottom: 3,
+  },
+  sourceText: {
+    fontSize: 13,
+    color: '#1f2937',
+    fontWeight: '700',
+  },
+  sourceMeta: {
+    fontSize: 12,
+    color: '#2563eb',
+    marginTop: 3,
+    fontWeight: '600',
   },
   fieldContainer: {
     marginBottom: 20,
