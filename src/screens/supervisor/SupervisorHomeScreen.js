@@ -76,13 +76,20 @@ export default function SupervisorHomeScreen({navigation, route}) {
       route: 'Weather',
     },
     {
-      id: 'seasons',
+      id: 'plan',
       title: 'Vùng trồng',
-      subtitle: `${seasons.length} mùa vụ`,
-      icon: 'map-pin',
+      subtitle: `${assignedSeasons.length} mùa vụ`,
+      icon: 'map',
       color: '#10b981',
       bg: '#d1fae5',
       route: 'SeasonManagement',
+      onPress: () => {
+        if (assignedSeasons.length > 0) {
+          navigation.navigate('SeasonDetail', {seasonId: assignedSeasons[0].id});
+        } else {
+          navigation.navigate('SeasonManagement');
+        }
+      },
     },
     {
       id: 'plan',
@@ -202,18 +209,7 @@ export default function SupervisorHomeScreen({navigation, route}) {
             <TouchableOpacity
               key={item.id}
               style={styles.menuCard}
-              onPress={() =>
-                navigation.navigate(item.route, {
-                  userId,
-                  userName: currentUser?.fullName,
-                })
-              }
-              activeOpacity={0.7}>
-              {item.badge && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{item.badge}</Text>
-                </View>
-              )}
+              onPress={item.onPress || (() => navigation.navigate(item.route))}>
               <View style={[styles.menuIconContainer, {backgroundColor: item.bg}]}>
                 <Feather name={item.icon} size={32} color={item.color} />
               </View>

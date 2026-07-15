@@ -17,6 +17,7 @@ import {colors} from '../../theme/colors';
 export default function FarmerHomeScreen({navigation, route}) {
   const [currentUser, setCurrentUser] = useState(null);
   const [assignedSeasons, setAssignedSeasons] = useState([]);
+  const [currentPhase, setCurrentPhase] = useState(null);
   const [pendingReports, setPendingReports] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -30,6 +31,7 @@ export default function FarmerHomeScreen({navigation, route}) {
       const seasons = data.seasons || [];
       const assignments = data.assignments || [];
       const reports = data.farmerDailyReports || [];
+      const phases = data.phases || [];
 
       const user = users.find(u => u.id === userId);
       setCurrentUser(user);
@@ -40,6 +42,21 @@ export default function FarmerHomeScreen({navigation, route}) {
         .filter(Boolean);
 
       setAssignedSeasons(userSeasons);
+
+      // Find current phase (IN_PROGRESS) of first assigned season
+      if (userSeasons.length > 0) {
+        const firstSeasonId = userSeasons[0].id;
+        const activePhase = phases.find(
+          p => p.seasonId === firstSeasonId && p.status === 'IN_PROGRESS' && !p.deletedAt
+        );
+        if (activePhase) {
+          setCurrentPhase({
+            ...activePhase,
+            seasonId: firstSeasonId,
+            seasonName: userSeasons[0].name,
+          });
+        }
+      }
 
       // Backend chưa trả syncStatus; đếm báo cáo còn hiệu lực của nông dân.
       const pendingCount = reports.filter(
@@ -96,12 +113,18 @@ export default function FarmerHomeScreen({navigation, route}) {
     {
       id: 'report',
       title: 'Báo cáo',
-      subtitle: `${pendingReports} chưa đồng bộ`,
+      subtitle: currentPhase ? 'Báo cáo hàng ngày' : 'Chưa có giai đoạn',
       icon: 'file-text',
       color: '#f59e0b',
       bg: '#fef3c7',
       route: 'DailyReport',
       badge: pendingReports > 0 ? String(pendingReports) : null,
+      disabled: !currentPhase,
+      onPress: currentPhase ? () => navigation.navigate('FarmerDailyReport', {
+        seasonId: currentPhase.seasonId,
+        phaseId: currentPhase.id,
+        phaseTitle: currentPhase.title,
+      }) : null,
     },
     {
       id: 'diary',
@@ -171,15 +194,38 @@ export default function FarmerHomeScreen({navigation, route}) {
           </View>
         </View>
 
+        {/* Current Phase Card */}
+        {currentPhase && (
+          <View style={styles.currentPhaseCard}>
+            <View style={styles.currentPhaseHeader}>
+              <Feather name="activity" size={20} color={colors.green600} />
+              <Text style={styles.currentPhaseTitle}>Giai đoạn hiện tại</Text>
+            </View>
+            <Text style={styles.currentPhaseLabel}>{currentPhase.title}</Text>
+            <Text style={styles.currentPhaseSeason}>{currentPhase.seasonName}</Text>
+            <TouchableOpacity
+              style={styles.reportButton}
+              onPress={() => navigation.navigate('DailyReport', {
+                seasonId: currentPhase.seasonId,
+                phaseId: currentPhase.id,
+                phaseTitle: currentPhase.title,
+              })}>
+              <Feather name="file-text" size={18} color="white" />
+              <Text style={styles.reportButtonText}>Báo cáo ngay</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.menuGrid}>
           {menuItems.map(item => (
             <TouchableOpacity
               key={item.id}
-              style={styles.menuCard}
-              onPress={() =>
+              style={[styles.menuCard, item.disabled && styles.menuCardDisabled]}
+              onPress={item.onPress || (() =>
                 navigation.navigate(item.route, {userId, userName: currentUser?.fullName})
-              }
-              activeOpacity={0.7}>
+              )}
+              activeOpacity={0.7}
+              disabled={item.disabled}>
               {item.badge && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{item.badge}</Text>
@@ -334,5 +380,59 @@ const styles = StyleSheet.create({
     color: colors.gray500,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  menuCardDisabled: {
+    opacity: 0.5,
+  },
+  currentPhaseCard: {
+    backgroundColor: colors.white,
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 16,
+    padding: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.green600,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  currentPhaseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  currentPhaseTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.green700,
+    marginLeft: 8,
+    textTransform: 'uppercase',
+  },
+  currentPhaseLabel: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.gray800,
+    marginBottom: 4,
+  },
+  currentPhaseSeason: {
+    fontSize: 14,
+    color: colors.gray500,
+    marginBottom: 16,
+  },
+  reportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.green600,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  reportButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: 'white',
   },
 });

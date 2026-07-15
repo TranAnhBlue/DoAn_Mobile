@@ -131,4 +131,75 @@ export const apiClient = {
   get refreshToken() {
     return refreshToken;
   },
+
+  getSeasonDetail: async (seasonId) => {
+    const result = await request(`/api/seasons/${seasonId}`);
+    return result.data;
+  },
+
+  assignFarmer: async (seasonId, farmerId) => {
+    const result = await request(`/api/seasons/${seasonId}/assign-farmer`, {
+      method: 'POST',
+      body: JSON.stringify({farmerId}),
+    });
+    return result.data;
+  },
+
+  startPhase: async (seasonId, phaseId, startDate) => {
+    const result = await request(`/api/seasons/${seasonId}/phases/${phaseId}/start`, {
+      method: 'POST',
+      body: JSON.stringify({startDate}),
+    });
+    return result.data;
+  },
+
+  completePhase: async (seasonId, phaseId, completionNote) => {
+    const result = await request(`/api/seasons/${seasonId}/phases/${phaseId}/complete`, {
+      method: 'POST',
+      body: JSON.stringify({completionNote}),
+    });
+    return result.data;
+  },
+
+  createFieldDiary: async (diaryData) => {
+    const result = await request('/api/sync/bulk', {
+      method: 'POST',
+      body: JSON.stringify({
+        deviceId: DEVICE_ID,
+        userId: diaryData.supervisorId,
+        clientTime: new Date().toISOString(),
+        operations: [
+          {
+            clientOperationId: `op-diary-${Date.now()}`,
+            entityType: 'FIELD_DIARY',
+            operation: 'CREATE',
+            entityId: `diary-${Date.now()}`,
+            data: diaryData,
+          },
+        ],
+      }),
+    });
+    return result.data;
+  },
+
+  createDailyReport: async (reportData) => {
+    const result = await request('/api/sync/bulk', {
+      method: 'POST',
+      body: JSON.stringify({
+        deviceId: DEVICE_ID,
+        userId: reportData.farmerId,
+        clientTime: new Date().toISOString(),
+        operations: [
+          {
+            clientOperationId: `op-report-${Date.now()}`,
+            entityType: 'FARMER_DAILY_REPORT',
+            operation: 'CREATE',
+            entityId: `report-${Date.now()}`,
+            data: reportData,
+          },
+        ],
+      }),
+    });
+    return result.data;
+  },
 };
