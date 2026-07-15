@@ -1,54 +1,55 @@
-import { open } from '@op-engineering/op-sqlite';
+import { open } from '@op-engineering/op-sqlite'
 
-let db = null;
+let dbInstance = null
 
-export function getDatabase() {
-  if (!db) {
-    db = open({ name: 'eapls_mobile.db' });
-    console.log('✅ Database connection established');
+export const getDb = () => {
+  if (!dbInstance) {
+    dbInstance = open({ name: 'farming_mobile.db' })
   }
-  return db;
+  return dbInstance
 }
 
-export async function executeQuery(query, params = []) {
-  try {
-    const database = getDatabase();
-    const result = await database.execute(query, params);
-    return result;
-  } catch (error) {
-    console.error('❌ Database query error:', error);
-    throw error;
-  }
+export const execute = (sql, params = []) => {
+  const db = getDb()
+  return db.execute(sql, params)
 }
 
-export async function executeBatch(statements) {
-  const database = getDatabase();
-  try {
-    await database.executeBatch(statements);
-  } catch (error) {
-    console.error('❌ Database batch error:', error);
-    throw error;
+export const executeTransaction = async (callback) => {
+  const db = getDb()
+  const commands = []
+  const tx = {
+    executeSql: (sql, params = []) => {
+      commands.push([sql, params])
+    },
   }
-}
 
-export async function transaction(callback) {
-  const database = getDatabase();
-  try {
-    await database.execute('BEGIN TRANSACTION');
-    const result = await callback(database);
-    await database.execute('COMMIT');
-    return result;
-  } catch (error) {
-    await database.execute('ROLLBACK');
-    console.error('❌ Transaction error:', error);
-    throw error;
+  callback(tx)
+
+  if (commands.length > 0) {
+    await db.executeBatch(commands)
   }
 }
 
-export function closeDatabase() {
-  if (db) {
-    db.close();
-    db = null;
-    console.log('🔒 Database connection closed');
+/**
+ * op-sqlite trả về result.rows là một plain array.
+ * Hàm này chuẩn hoá output để tương thích.
+ */
+export const rowsToArray = (result) => {
+  if (!result) return []
+
+  // op-sqlite: result.rows là plain array
+  if (Array.isArray(result.rows)) {
+    return result.rows
   }
+
+  // Fallback cho SQLite khác dùng .item()
+  if (result.rows && typeof result.rows.item === 'function') {
+    const rows = []
+    for (let i = 0; i < result.rows.length; i++) {
+      rows.push(result.rows.item(i))
+    }
+    return rows
+  }
+
+  return []
 }

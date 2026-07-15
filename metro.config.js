@@ -1,26 +1,21 @@
-const { getDefaultConfig } = require('expo/metro-config');
+const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
 const path = require('path');
 
-const projectRoot = __dirname;
-const workspaceRoot = path.resolve(projectRoot, '..');
+/**
+ * Metro configuration
+ * https://reactnative.dev/docs/metro
+ *
+ * @type {import('@react-native/metro-config').MetroConfig}
+ */
+const config = {
+  watchFolders: [],
+  resolver: {
+    blockList: [
+      /android\/app\/\.cxx\/.*/,
+      /android\/build\/.*/,
+      /android\/\.gradle\/.*/,
+    ],
+  },
+};
 
-const config = getDefaultConfig(projectRoot);
-
-// Watch all files within the monorepo
-config.watchFolders = [workspaceRoot];
-
-// Let Metro know where to resolve packages
-config.resolver.nodeModulesPaths = [
-  path.resolve(projectRoot, 'node_modules'),
-];
-
-// Ignore root node_modules if it doesn't exist
-config.resolver.blockList = [
-  // Ignore root node_modules
-  /^(?!.*node_modules).*\/node_modules\/.*/,
-  // Ignore other project node_modules
-  /\/backend\/node_modules\/.*/,
-  /\/frontend\/node_modules\/.*/,
-];
-
-module.exports = config;
+module.exports = mergeConfig(getDefaultConfig(__dirname), config);

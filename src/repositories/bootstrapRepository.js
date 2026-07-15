@@ -1,174 +1,315 @@
-import { executeQuery, transaction } from '../database/db';
-import { syncRepository } from './syncRepository';
+import { executeTransaction } from '../database/db'
+import { setSyncCursor } from './syncRepository'
 
-export const bootstrapRepository = {
-  async applyServerChanges(serverData) {
-    console.log('📥 Applying server changes...');
-    
-    await transaction(async () => {
-      if (serverData.users) {
-        await this.upsertUsers(serverData.users);
-      }
-      if (serverData.seasons) {
-        await this.upsertSeasons(serverData.seasons);
-      }
-      if (serverData.phases) {
-        await this.upsertPhases(serverData.phases);
-      }
-      if (serverData.technical_descriptions) {
-        await this.upsertTechnicalDescriptions(serverData.technical_descriptions);
-      }
-      if (serverData.season_farmer_assignments) {
-        await this.upsertSeasonFarmerAssignments(serverData.season_farmer_assignments);
-      }
-      if (serverData.farmer_daily_reports) {
-        await this.upsertFarmerDailyReports(serverData.farmer_daily_reports);
-      }
-      if (serverData.field_diaries) {
-        await this.upsertFieldDiaries(serverData.field_diaries);
-      }
-      if (serverData.phase_events) {
-        await this.upsertPhaseEvents(serverData.phase_events);
-      }
-      
-      if (serverData.cursors) {
-        await this.updateCursors(serverData.cursors);
-      }
-    });
-    
-    console.log('✅ Server changes applied');
-  },
+const boolToInt = (value) => (value ? 1 : 0)
 
-  async upsertUsers(users) {
-    for (const user of users) {
-      await executeQuery(
-        `INSERT OR REPLACE INTO users 
-         (id, username, fullname, email, phone, avatar, role, roles, organization, province,
-          sync_status, server_version, dirty_flag, updated_at, last_synced_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED', ?, 0, ?, datetime('now'), ?)`,
+export const applyServerChanges = async (changes) => {
+  if (!changes) return
+
+  await executeTransaction((tx) => {
+    ;(changes.users || []).forEach((item) => {
+      tx.executeSql(
+        `INSERT OR REPLACE INTO users (
+          id,
+          full_name,
+          phone,
+          role,
+          farm_id,
+          created_at,
+          updated_at,
+          last_synced_at
+        ) VALUES (?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM users WHERE id = ?), ?), ?, ?)`,
         [
-          user.id, user.username, user.fullname, user.email, user.phone,
-          user.avatar, user.role, JSON.stringify(user.roles), user.organization, user.province,
-          user.server_version || 1, user.updated_at, user.deleted_at
-        ]
-      );
-    }
-  },
+          item.id,
+          item.fullName,
+          item.phone || null,
+          item.role,
+          item.farmId || null,
+          item.id,
+          item.updatedAt,
+          item.updatedAt,
+          item.updatedAt,
+        ],
+      )
+    })
 
-  async upsertSeasons(seasons) {
-    for (const season of seasons) {
-      await executeQuery(
-        `INSERT OR REPLACE INTO seasons 
-         (id, name, crop_type, land_area, start_date, end_date, status, supervisor_id,
-          sync_status, server_version, dirty_flag, updated_at, last_synced_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED', ?, 0, ?, datetime('now'), ?)`,
+    ;(changes.seasons || []).forEach((item) => {
+      tx.executeSql(
+        `INSERT OR REPLACE INTO seasons (
+          id,
+          name,
+          crop,
+          category,
+          specific_crop,
+          area_name,
+          area_id,
+          supervisor_id,
+          start_date,
+          expected_start_date,
+          status,
+          is_planned,
+          server_version,
+          deleted_at,
+          created_at,
+          updated_at,
+          last_synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          season.id, season.name, season.crop_type, season.land_area,
-          season.start_date, season.end_date, season.status, season.supervisor_id,
-          season.server_version || 1, season.updated_at, season.deleted_at
-        ]
-      );
-    }
-  },
+          item.id,
+          item.name,
+          item.crop || null,
+          item.category || null,
+          item.specificCrop || null,
+          item.areaName || null,
+          item.areaId || null,
+          item.supervisorId || null,
+          item.startDate || null,
+          item.expectedStartDate || null,
+          item.status || 'ACTIVE',
+          boolToInt(item.isPlanned),
+          item.serverVersion || 0,
+          item.deletedAt || null,
+          item.createdAt,
+          item.updatedAt,
+          item.updatedAt,
+        ],
+      )
+    })
 
-  async upsertPhases(phases) {
-    for (const phase of phases) {
-      await executeQuery(
-        `INSERT OR REPLACE INTO phases 
-         (id, season_id, name, description, phase_order, planned_start_date, planned_end_date,
-          actual_start_date, actual_end_date, status, sync_status, server_version, dirty_flag,
-          updated_at, last_synced_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED', ?, 0, ?, datetime('now'), ?)`,
+    ;(changes.phases || []).forEach((item) => {
+      tx.executeSql(
+        `INSERT OR REPLACE INTO phases (
+          id,
+          season_id,
+          phase_order,
+          title,
+          status,
+          date_from,
+          date_to,
+          started_at,
+          completed_at,
+          started_by,
+          completed_by,
+          server_version,
+          deleted_at,
+          created_at,
+          updated_at,
+          last_synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          phase.id, phase.season_id, phase.name, phase.description, phase.phase_order,
-          phase.planned_start_date, phase.planned_end_date, phase.actual_start_date,
-          phase.actual_end_date, phase.status, phase.server_version || 1,
-          phase.updated_at, phase.deleted_at
-        ]
-      );
-    }
-  },
+          item.id,
+          item.seasonId,
+          item.phaseOrder,
+          item.title,
+          item.status,
+          item.dateFrom || null,
+          item.dateTo || null,
+          item.startedAt || null,
+          item.completedAt || null,
+          item.startedBy || null,
+          item.completedBy || null,
+          item.serverVersion || 0,
+          item.deletedAt || null,
+          item.createdAt,
+          item.updatedAt,
+          item.updatedAt,
+        ],
+      )
+    })
 
-  async upsertTechnicalDescriptions(descriptions) {
-    for (const desc of descriptions) {
-      await executeQuery(
-        `INSERT OR REPLACE INTO technical_descriptions 
-         (id, phase_id, work_description, materials_needed, estimated_duration,
-          sync_status, server_version, dirty_flag, updated_at, last_synced_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, 'SYNCED', ?, 0, ?, datetime('now'), ?)`,
+    ;(changes.technicalDescriptions || []).forEach((item) => {
+      tx.executeSql(
+        `INSERT OR REPLACE INTO technical_descriptions (
+          id,
+          phase_id,
+          title,
+          content,
+          language,
+          version,
+          is_active,
+          server_version,
+          deleted_at,
+          created_at,
+          updated_at,
+          last_synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          desc.id, desc.phase_id, desc.work_description, desc.materials_needed,
-          desc.estimated_duration, desc.server_version || 1, desc.updated_at, desc.deleted_at
-        ]
-      );
-    }
-  },
+          item.id,
+          item.phaseId,
+          item.title || null,
+          item.content,
+          item.language || 'vi',
+          item.version || 1,
+          boolToInt(item.isActive),
+          item.serverVersion || 0,
+          item.deletedAt || null,
+          item.createdAt,
+          item.updatedAt,
+          item.updatedAt,
+        ],
+      )
+    })
 
-  async upsertSeasonFarmerAssignments(assignments) {
-    for (const assignment of assignments) {
-      await executeQuery(
-        `INSERT OR REPLACE INTO season_farmer_assignments 
-         (id, season_id, farmer_id, assigned_at, sync_status, server_version, dirty_flag,
-          updated_at, last_synced_at, deleted_at)
-         VALUES (?, ?, ?, ?, 'SYNCED', ?, 0, ?, datetime('now'), ?)`,
+    ;(changes.assignments || []).forEach((item) => {
+      tx.executeSql(
+        `INSERT OR REPLACE INTO season_farmer_assignments (
+          id,
+          season_id,
+          farmer_id,
+          assigned_by,
+          assigned_at,
+          status,
+          deleted_at,
+          created_at,
+          updated_at,
+          last_synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          assignment.id, assignment.season_id, assignment.farmer_id, assignment.assigned_at,
-          assignment.server_version || 1, assignment.updated_at, assignment.deleted_at
-        ]
-      );
-    }
-  },
+          item.id,
+          item.seasonId,
+          item.farmerId,
+          item.assignedBy,
+          item.assignedAt,
+          item.status || 'ACTIVE',
+          item.deletedAt || null,
+          item.createdAt,
+          item.updatedAt,
+          item.updatedAt,
+        ],
+      )
+    })
 
-  async upsertFarmerDailyReports(reports) {
-    for (const report of reports) {
-      await executeQuery(
-        `INSERT OR REPLACE INTO farmer_daily_reports 
-         (id, farmer_id, phase_id, report_date, notes, status, sync_status, server_version,
-          dirty_flag, updated_at, last_synced_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'SYNCED', ?, 0, ?, datetime('now'), ?)`,
+    ;(changes.farmerDailyReports || []).forEach((item) => {
+      tx.executeSql(
+        `INSERT OR REPLACE INTO farmer_daily_reports (
+          id,
+          season_id,
+          phase_id,
+          farmer_id,
+          report_date,
+          status,
+          note,
+          client_created_at,
+          server_received_at,
+          sync_status,
+          server_version,
+          dirty_flag,
+          deleted_at,
+          created_at,
+          updated_at,
+          last_synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED', ?, 0, ?, ?, ?, ?)`,
         [
-          report.id, report.farmer_id, report.phase_id, report.report_date,
-          report.notes, report.status, report.server_version || 1,
-          report.updated_at, report.deleted_at
-        ]
-      );
-    }
-  },
+          item.id,
+          item.seasonId,
+          item.phaseId,
+          item.farmerId,
+          item.reportDate,
+          item.status,
+          item.note || null,
+          item.clientCreatedAt,
+          item.serverReceivedAt || null,
+          item.serverVersion || 0,
+          item.deletedAt || null,
+          item.createdAt,
+          item.updatedAt,
+          item.updatedAt,
+        ],
+      )
+    })
 
-  async upsertFieldDiaries(diaries) {
-    for (const diary of diaries) {
-      await executeQuery(
-        `INSERT OR REPLACE INTO field_diaries 
-         (id, supervisor_id, phase_id, diary_date, notes, weather_condition, sync_status,
-          server_version, dirty_flag, updated_at, last_synced_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'SYNCED', ?, 0, ?, datetime('now'), ?)`,
+    ;(changes.fieldDiaries || []).forEach((item) => {
+      tx.executeSql(
+        `INSERT OR REPLACE INTO field_diaries (
+          id,
+          season_id,
+          phase_id,
+          supervisor_id,
+          log_date,
+          task_code,
+          content,
+          weather,
+          plant_condition,
+          soil_condition,
+          issue_level,
+          client_created_at,
+          server_received_at,
+          sync_status,
+          server_version,
+          dirty_flag,
+          deleted_at,
+          created_at,
+          updated_at,
+          last_synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED', ?, 0, ?, ?, ?, ?)`,
         [
-          diary.id, diary.supervisor_id, diary.phase_id, diary.diary_date,
-          diary.notes, diary.weather_condition, diary.server_version || 1,
-          diary.updated_at, diary.deleted_at
-        ]
-      );
-    }
-  },
+          item.id,
+          item.seasonId,
+          item.phaseId,
+          item.supervisorId,
+          item.logDate,
+          item.taskCode || null,
+          item.content,
+          item.weather || null,
+          item.plantCondition || null,
+          item.soilCondition || null,
+          item.issueLevel || 'NONE',
+          item.clientCreatedAt,
+          item.serverReceivedAt || null,
+          item.serverVersion || 0,
+          item.deletedAt || null,
+          item.createdAt,
+          item.updatedAt,
+          item.updatedAt,
+        ],
+      )
+    })
 
-  async upsertPhaseEvents(events) {
-    for (const event of events) {
-      await executeQuery(
-        `INSERT OR REPLACE INTO phase_events 
-         (id, phase_id, event_type, event_date, notes, sync_status, server_version,
-          dirty_flag, updated_at, last_synced_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, 'SYNCED', ?, 0, ?, datetime('now'), ?)`,
+    ;(changes.mediaFiles || []).forEach((item) => {
+      tx.executeSql(
+        `INSERT OR REPLACE INTO media_files (
+          id,
+          owner_type,
+          owner_id,
+          media_type,
+          local_uri,
+          remote_url,
+          file_name,
+          mime_type,
+          file_size,
+          width,
+          height,
+          caption,
+          taken_at,
+          upload_status,
+          dirty_flag,
+          deleted_at,
+          created_at,
+          updated_at,
+          last_synced_at
+        ) VALUES (?, ?, ?, ?, COALESCE((SELECT local_uri FROM media_files WHERE id = ?), ''), ?, ?, ?, ?, ?, ?, ?, ?, 'UPLOADED', 0, ?, ?, ?, ?)`,
         [
-          event.id, event.phase_id, event.event_type, event.event_date,
-          event.notes, event.server_version || 1, event.updated_at, event.deleted_at
-        ]
-      );
-    }
-  },
+          item.id,
+          item.ownerType,
+          item.ownerId,
+          item.mediaType,
+          item.id,
+          item.remoteUrl || null,
+          item.fileName || null,
+          item.mimeType || null,
+          item.fileSize || null,
+          item.width || null,
+          item.height || null,
+          item.caption || null,
+          item.takenAt || null,
+          item.deletedAt || null,
+          item.createdAt,
+          item.updatedAt,
+          item.updatedAt,
+        ],
+      )
+    })
+  })
 
-  async updateCursors(cursors) {
-    for (const [entity, timestamp] of Object.entries(cursors)) {
-      await syncRepository.updateSyncCursor(entity, timestamp);
-    }
-  },
-};
+  await setSyncCursor(changes.cursor)
+}

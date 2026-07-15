@@ -1,286 +1,329 @@
-import { executeQuery, transaction } from '../database/db';
-import { syncRepository } from './syncRepository';
-import uuid from 'react-native-uuid';
+import { execute, executeTransaction, rowsToArray } from '../database/db'
+import { createUuid } from '../utils/uuid'
 
-export const supervisorRepository = {
-  async getSupervisorSeasons(supervisorId) {
-    const result = await executeQuery(
-      `SELECT 
-         s.id,
-         s.name,
-         s.crop_type,
-         s.land_area,
-         s.start_date,
-         s.end_date,
-         s.status,
-         COUNT(DISTINCT p.id) as total_phases,
-         COUNT(DISTINCT CASE WHEN p.status = 'COMPLETED' THEN p.id END) as completed_phases,
-         COUNT(DISTINCT sfa.farmer_id) as assigned_farmers,
-         COUNT(DISTINCT CASE WHEN fdr.status = 'SUBMITTED' THEN fdr.id END) as pending_reports
-       FROM seasons s
-       LEFT JOIN phases p ON s.id = p.season_id AND p.deleted_at IS NULL
-       LEFT JOIN season_farmer_assignments sfa ON s.id = sfa.season_id AND sfa.deleted_at IS NULL
-       LEFT JOIN farmer_daily_reports fdr ON p.id = fdr.phase_id AND fdr.deleted_at IS NULL
-       WHERE s.supervisor_id = ?
-         AND s.deleted_at IS NULL
-       GROUP BY s.id
-       ORDER BY s.created_at DESC`,
-      [supervisorId]
-    );
+const todayDate = () => new Date().toISOString().slice(0, 10)
+const nowIso = () => new Date().toISOString()
 
-    return result.rows?._array || [];
-  },
+const mapSeason = (row) => ({
+  id: row.id,
+  name: row.name,
+  crop: row.crop,
+  areaName: row.area_name,
+  status: row.status,
+  currentPhaseId: row.current_phase_id,
+  currentPhaseTitle: row.current_phase_title,
+  pendingReports: row.pending_reports || 0,
+})
 
-  async getSeasonPhases(seasonId) {
-    const result = await executeQuery(
-      `SELECT 
-         p.id,
-         p.name,
-         p.description,
-         p.phase_order,
-         p.planned_start_date,
-         p.planned_end_date,
-         p.actual_start_date,
-         p.actual_end_date,
-         p.status,
-         td.work_description,
-         td.materials_needed,
-         td.estimated_duration
-       FROM phases p
-       LEFT JOIN technical_descriptions td ON p.id = td.phase_id AND td.deleted_at IS NULL
-       WHERE p.season_id = ?
-         AND p.deleted_at IS NULL
-       ORDER BY p.phase_order ASC`,
-      [seasonId]
-    );
+const mapPhase = (row) => ({
+  id: row.id,
+  seasonId: row.season_id,
+  phaseOrder: row.phase_order,
+  title: row.title,
+  status: row.status,
+  dateFrom: row.date_from,
+  dateTo: row.date_to,
+  technicalDescription: row.technical_description,
+})
 
-    return result.rows?._array || [];
-  },
+const mapDiary = (row) => ({
+  id: row.id,
+  seasonId: row.season_id,
+  phaseId: row.phase_id,
+  logDate: row.log_date,
+  taskCode: row.task_code,
+  content: row.content,
+  issueLevel: row.issue_level,
+  syncStatus: row.sync_status,
+  mediaCount: row.media_count || 0,
+})
 
-  async startPhase(phaseId, actualStartDate) {
-    const eventId = uuid.v4();
-    const now = new Date().toISOString();
+export const getSupervisorSeasons = async (supervisorId) => {
+  const result = await execute(
+    `SELECT
+      s.id,
+      s.name,
+      s.crop,
+      s.area_name,
+      s.status,
+      cp.id AS current_phase_id,
+      cp.title AS current_phase_title,
+      COUNT(r.id) AS pending_reports
+    FROM seasons s
+    LEFT JOIN phases cp ON cp.season_id = s.id AND cp.status = 'IN_PROGRESS' AND cp.deleted_at IS NULL
+    LEFT JOIN farmer_daily_reports r ON r.season_id = s.id AND r.sync_status IN ('PENDING', 'SYNCED') AND r.deleted_at IS NULL
+    WHERE s.supervisor_id = ? AND s.deleted_at IS NULL
+    GROUP BY s.id
+    ORDER BY s.start_date DESC`,
+    [supervisorId],
+  )
 
-    return await transaction(async () => {
-      await executeQuery(
-        `UPDATE phases 
-         SET status = 'IN_PROGRESS', 
-             actual_start_date = ?,
-             dirty_flag = 1,
-             updated_at = ?
-         WHERE id = ?`,
-        [actualStartDate, now, phaseId]
-      );
+  return rowsToArray(result).map(mapSeason)
+}
 
-      await executeQuery(
-        `INSERT INTO phase_events 
-         (id, phase_id, event_type, event_date, notes, sync_status, dirty_flag, created_at)
-         VALUES (?, ?, 'START', ?, 'Phase started', 'PENDING', 1, ?)`,
-        [eventId, phaseId, actualStartDate, now]
-      );
+export const getSeasonPhases = async (seasonId) => {
+  const result = await execute(
+    `SELECT
+      p.id,
+      p.season_id,
+      p.phase_order,
+      p.title,
+      p.status,
+      p.date_from,
+      p.date_to,
+      td.content AS technical_description
+    FROM phases p
+    LEFT JOIN technical_descriptions td ON td.phase_id = p.id AND td.is_active = 1 AND td.deleted_at IS NULL
+    WHERE p.season_id = ? AND p.deleted_at IS NULL
+    ORDER BY p.phase_order ASC`,
+    [seasonId],
+  )
 
-      await syncRepository.addToSyncQueue(
-        'phase',
-        'UPDATE',
-        phaseId,
-        {
-          status: 'IN_PROGRESS',
-          actual_start_date: actualStartDate,
-        }
-      );
+  return rowsToArray(result).map(mapPhase)
+}
 
-      console.log('✅ Phase started (offline):', phaseId);
-      return phaseId;
-    });
-  },
+export const getPhaseDiaries = async (phaseId) => {
+  const result = await execute(
+    `SELECT
+      d.id,
+      d.season_id,
+      d.phase_id,
+      d.log_date,
+      d.task_code,
+      d.content,
+      d.issue_level,
+      d.sync_status,
+      COUNT(m.id) AS media_count
+    FROM field_diaries d
+    LEFT JOIN media_files m ON m.owner_type = 'FIELD_DIARY' AND m.owner_id = d.id AND m.deleted_at IS NULL
+    WHERE d.phase_id = ? AND d.deleted_at IS NULL
+    GROUP BY d.id
+    ORDER BY d.client_created_at DESC`,
+    [phaseId],
+  )
 
-  async completePhase(phaseId, actualEndDate) {
-    const eventId = uuid.v4();
-    const now = new Date().toISOString();
+  return rowsToArray(result).map(mapDiary)
+}
 
-    return await transaction(async () => {
-      await executeQuery(
-        `UPDATE phases 
-         SET status = 'COMPLETED', 
-             actual_end_date = ?,
-             dirty_flag = 1,
-             updated_at = ?
-         WHERE id = ?`,
-        [actualEndDate, now, phaseId]
-      );
+export const startPhase = async ({ supervisorId, seasonId, phaseId }) => {
+  const eventId = createUuid()
+  const queueId = createUuid()
+  const occurredAt = nowIso()
+  const payload = {
+    clientOperationId: queueId,
+    operation: 'PHASE_EVENT',
+    entityType: 'PHASE_EVENT',
+    entityId: eventId,
+    baseServerVersion: 0,
+    occurredAt,
+    payload: {
+      id: eventId,
+      seasonId,
+      phaseId,
+      actorId: supervisorId,
+      eventType: 'PHASE_STARTED',
+      eventAt: occurredAt,
+      note: null,
+    },
+  }
 
-      await executeQuery(
-        `INSERT INTO phase_events 
-         (id, phase_id, event_type, event_date, notes, sync_status, dirty_flag, created_at)
-         VALUES (?, ?, 'COMPLETE', ?, 'Phase completed', 'PENDING', 1, ?)`,
-        [eventId, phaseId, actualEndDate, now]
-      );
+  await executeTransaction((tx) => {
+    tx.executeSql(
+      `INSERT INTO phase_events (
+        id,
+        season_id,
+        phase_id,
+        actor_id,
+        event_type,
+        event_at,
+        sync_status,
+        dirty_flag,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, 'PHASE_STARTED', ?, 'PENDING', 1, ?, ?)`,
+      [eventId, seasonId, phaseId, supervisorId, occurredAt, occurredAt, occurredAt],
+    )
 
-      await syncRepository.addToSyncQueue(
-        'phase',
-        'UPDATE',
-        phaseId,
-        {
-          status: 'COMPLETED',
-          actual_end_date: actualEndDate,
-        }
-      );
+    tx.executeSql(
+      `UPDATE phases
+      SET status = 'IN_PROGRESS', started_at = COALESCE(started_at, ?), started_by = COALESCE(started_by, ?), dirty_flag = 1, updated_at = ?
+      WHERE id = ?`,
+      [occurredAt, supervisorId, occurredAt, phaseId],
+    )
 
-      console.log('✅ Phase completed (offline):', phaseId);
-      return phaseId;
-    });
-  },
+    tx.executeSql(
+      `INSERT INTO sync_queue (
+        id,
+        operation_type,
+        entity_type,
+        entity_id,
+        payload_json,
+        status,
+        retry_count,
+        max_retry,
+        created_at,
+        updated_at
+      ) VALUES (?, 'PHASE_EVENT', 'PHASE_EVENT', ?, ?, 'PENDING', 0, 5, ?, ?)`,
+      [queueId, eventId, JSON.stringify(payload), occurredAt, occurredAt],
+    )
+  })
+}
 
-  async createFieldDiary(supervisorId, phaseId, data) {
-    const diaryId = uuid.v4();
-    const now = new Date().toISOString();
+export const createFieldDiary = async ({ supervisorId, seasonId, phaseId, taskCode, content, imageAssets }) => {
+  const diaryId = createUuid()
+  const diaryQueueId = createUuid()
+  const occurredAt = nowIso()
+  const logDate = todayDate()
+  const normalizedImages = imageAssets.slice(0, 2)
+  const diaryPayload = {
+    clientOperationId: diaryQueueId,
+    operation: 'CREATE',
+    entityType: 'FIELD_DIARY',
+    entityId: diaryId,
+    baseServerVersion: 0,
+    occurredAt,
+    payload: {
+      id: diaryId,
+      seasonId,
+      phaseId,
+      supervisorId,
+      logDate,
+      taskCode: taskCode?.trim() || null,
+      content: content.trim(),
+      weather: null,
+      plantCondition: null,
+      soilCondition: null,
+      issueLevel: 'NONE',
+      clientCreatedAt: occurredAt,
+    },
+  }
 
-    return await transaction(async () => {
-      await executeQuery(
-        `INSERT INTO field_diaries 
-         (id, supervisor_id, phase_id, diary_date, notes, weather_condition, sync_status, dirty_flag, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 1, ?, ?)`,
-        [
-          diaryId,
-          supervisorId,
-          phaseId,
-          data.diary_date || now,
-          data.notes || '',
-          data.weather_condition || '',
-          now,
-          now,
-        ]
-      );
-
-      await syncRepository.addToSyncQueue(
-        'field_diary',
-        'CREATE',
+  await executeTransaction((tx) => {
+    tx.executeSql(
+      `INSERT INTO field_diaries (
+        id,
+        season_id,
+        phase_id,
+        supervisor_id,
+        log_date,
+        task_code,
+        content,
+        issue_level,
+        client_created_at,
+        sync_status,
+        dirty_flag,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'NONE', ?, 'PENDING', 1, ?, ?)`,
+      [
         diaryId,
-        {
-          supervisor_id: supervisorId,
-          phase_id: phaseId,
-          diary_date: data.diary_date || now,
-          notes: data.notes || '',
-          weather_condition: data.weather_condition || '',
-        }
-      );
+        seasonId,
+        phaseId,
+        supervisorId,
+        logDate,
+        taskCode?.trim() || null,
+        content.trim(),
+        occurredAt,
+        occurredAt,
+        occurredAt,
+      ],
+    )
 
-      if (data.images && data.images.length > 0) {
-        for (const image of data.images) {
-          const mediaId = uuid.v4();
-          await executeQuery(
-            `INSERT INTO media_files 
-             (id, entity_type, entity_id, file_uri, file_type, upload_status, sync_status, created_at)
-             VALUES (?, 'field_diary', ?, ?, 'image', 'PENDING', 'PENDING', ?)`,
-            [mediaId, diaryId, image.uri, now]
-          );
-        }
+    tx.executeSql(
+      `INSERT INTO sync_queue (
+        id,
+        operation_type,
+        entity_type,
+        entity_id,
+        payload_json,
+        status,
+        retry_count,
+        max_retry,
+        created_at,
+        updated_at
+      ) VALUES (?, 'CREATE', 'FIELD_DIARY', ?, ?, 'PENDING', 0, 5, ?, ?)`,
+      [diaryQueueId, diaryId, JSON.stringify(diaryPayload), occurredAt, occurredAt],
+    )
+
+    normalizedImages.forEach((asset, index) => {
+      const mediaId = createUuid()
+      const mediaQueueId = createUuid()
+      const mediaPayload = {
+        clientOperationId: mediaQueueId,
+        operation: 'UPLOAD_MEDIA',
+        entityType: 'MEDIA_FILE',
+        entityId: mediaId,
+        baseServerVersion: 0,
+        occurredAt,
+        payload: {
+          id: mediaId,
+          ownerType: 'FIELD_DIARY',
+          ownerId: diaryId,
+          mediaType: 'IMAGE',
+          localUri: asset.uri,
+          fileName: asset.fileName || `field-diary-${index + 1}.jpg`,
+          mimeType: asset.type || 'image/jpeg',
+          fileSize: asset.fileSize || null,
+          width: asset.width || null,
+          height: asset.height || null,
+          caption: `Anh thuc dia ${index + 1}`,
+          takenAt: occurredAt,
+        },
       }
 
-      console.log('✅ Field diary created (offline):', diaryId);
-      return diaryId;
-    });
-  },
+      tx.executeSql(
+        `INSERT INTO media_files (
+          id,
+          owner_type,
+          owner_id,
+          media_type,
+          local_uri,
+          file_name,
+          mime_type,
+          file_size,
+          width,
+          height,
+          caption,
+          taken_at,
+          upload_status,
+          dirty_flag,
+          created_at,
+          updated_at
+        ) VALUES (?, 'FIELD_DIARY', ?, 'IMAGE', ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 1, ?, ?)`,
+        [
+          mediaId,
+          diaryId,
+          asset.uri,
+          asset.fileName || `field-diary-${index + 1}.jpg`,
+          asset.type || 'image/jpeg',
+          asset.fileSize || null,
+          asset.width || null,
+          asset.height || null,
+          `Anh thuc dia ${index + 1}`,
+          occurredAt,
+          occurredAt,
+          occurredAt,
+        ],
+      )
 
-  async getPendingReports(supervisorId) {
-    const result = await executeQuery(
-      `SELECT 
-         fdr.id,
-         fdr.report_date,
-         fdr.notes,
-         fdr.status,
-         fdr.created_at,
-         u.fullname as farmer_name,
-         u.phone as farmer_phone,
-         p.name as phase_name,
-         s.name as season_name
-       FROM farmer_daily_reports fdr
-       INNER JOIN users u ON fdr.farmer_id = u.id
-       INNER JOIN phases p ON fdr.phase_id = p.id
-       INNER JOIN seasons s ON p.season_id = s.id
-       WHERE s.supervisor_id = ?
-         AND fdr.status = 'SUBMITTED'
-         AND fdr.deleted_at IS NULL
-       ORDER BY fdr.created_at DESC`,
-      [supervisorId]
-    );
+      tx.executeSql(
+        `INSERT INTO sync_queue (
+          id,
+          operation_type,
+          entity_type,
+          entity_id,
+          payload_json,
+          dependency_queue_id,
+          status,
+          retry_count,
+          max_retry,
+          created_at,
+          updated_at
+        ) VALUES (?, 'UPLOAD_MEDIA', 'MEDIA_FILE', ?, ?, ?, 'PENDING', 0, 5, ?, ?)`,
+        [mediaQueueId, mediaId, JSON.stringify(mediaPayload), diaryQueueId, occurredAt, occurredAt],
+      )
+    })
+  })
 
-    return result.rows?._array || [];
-  },
-
-  async approveReport(reportId) {
-    const now = new Date().toISOString();
-
-    return await transaction(async () => {
-      await executeQuery(
-        `UPDATE farmer_daily_reports 
-         SET status = 'APPROVED', 
-             dirty_flag = 1,
-             updated_at = ?
-         WHERE id = ?`,
-        [now, reportId]
-      );
-
-      await syncRepository.addToSyncQueue(
-        'farmer_daily_report',
-        'UPDATE',
-        reportId,
-        { status: 'APPROVED' }
-      );
-
-      console.log('✅ Report approved (offline):', reportId);
-      return reportId;
-    });
-  },
-
-  async rejectReport(reportId, reason) {
-    const now = new Date().toISOString();
-
-    return await transaction(async () => {
-      await executeQuery(
-        `UPDATE farmer_daily_reports 
-         SET status = 'REJECTED', 
-             notes = notes || '\n[Từ chối: ' || ? || ']',
-             dirty_flag = 1,
-             updated_at = ?
-         WHERE id = ?`,
-        [reason, now, reportId]
-      );
-
-      await syncRepository.addToSyncQueue(
-        'farmer_daily_report',
-        'UPDATE',
-        reportId,
-        { status: 'REJECTED', rejection_reason: reason }
-      );
-
-      console.log('✅ Report rejected (offline):', reportId);
-      return reportId;
-    });
-  },
-
-  async getFieldDiaries(phaseId, limit = 20) {
-    const result = await executeQuery(
-      `SELECT 
-         fd.id,
-         fd.diary_date,
-         fd.notes,
-         fd.weather_condition,
-         fd.sync_status,
-         fd.created_at,
-         u.fullname as supervisor_name,
-         COUNT(mf.id) as image_count
-       FROM field_diaries fd
-       INNER JOIN users u ON fd.supervisor_id = u.id
-       LEFT JOIN media_files mf ON fd.id = mf.entity_id AND mf.entity_type = 'field_diary'
-       WHERE fd.phase_id = ?
-         AND fd.deleted_at IS NULL
-       GROUP BY fd.id
-       ORDER BY fd.diary_date DESC, fd.created_at DESC
-       LIMIT ?`,
-      [phaseId, limit]
-    );
-
-    return result.rows?._array || [];
-  },
-};
+  return { diaryId }
+}
