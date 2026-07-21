@@ -1,11 +1,14 @@
 import { Feather } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useQuery } from '@tanstack/react-query';
 
 import NotificationsScreen from '../features/notifications/screens/NotificationsScreen';
 import MyTasksScreen from '../features/production/screens/MyTasksScreen';
 import PlansAndLogsScreen from '../features/production/screens/PlansAndLogsScreen';
 import LandPlotsScreen from '../features/production/screens/LandPlotsScreen';
 import ProfileScreen from '../features/profile/screens/ProfileScreen';
+import api from '../shared/api/client';
+import { extractItems, unwrapPayload } from '../shared/api/response';
 
 const Tab = createBottomTabNavigator();
 
@@ -18,6 +21,22 @@ const TABS = [
 ];
 
 export default function MainTabNavigator() {
+  const unreadQuery = useQuery({
+    queryKey: ['notifications', 'unread'],
+    queryFn: async () => {
+      const response = await api.get('/notifications/unread');
+      const payload = unwrapPayload(response.data);
+      const items = extractItems(response.data);
+
+      if (Array.isArray(payload)) return payload.length;
+      if (items.length) return items.length;
+      return Number(payload?.unreadCount ?? payload?.count ?? payload?.totalItems ?? 0);
+    },
+    staleTime: 15000,
+    refetchInterval: 30000,
+  });
+  const unreadCount = Number.isFinite(unreadQuery.data) ? unreadQuery.data : 0;
+
   return (
     <Tab.Navigator
       initialRouteName="PlansAndLogs"
@@ -44,7 +63,15 @@ export default function MainTabNavigator() {
           key={tab.name}
           name={tab.name}
           component={tab.component}
-          options={{ tabBarLabel: tab.label }}
+          options={{
+            tabBarLabel: tab.label,
+            tabBarBadge: tab.name === 'Notifications' && unreadCount > 0
+              ? (unreadCount > 99 ? '99+' : unreadCount)
+              : undefined,
+            tabBarBadgeStyle: tab.name === 'Notifications'
+              ? { backgroundColor: '#dc2626', color: '#fff', fontSize: 10, fontWeight: '900' }
+              : undefined,
+          }}
         />
       ))}
     </Tab.Navigator>

@@ -5,7 +5,11 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -16,6 +20,7 @@ import {
 
 import api from '../../../shared/api/client';
 import { extractItems, getApiErrorMessage, getEntityId } from '../../../shared/api/response';
+import DailyLogModal from '../components/DailyLogModal';
 
 const STATUS = {
   PENDING: ['Chờ thực hiện', '#64748b'],
@@ -37,7 +42,6 @@ export default function MyTasksScreen() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [entryMode, setEntryMode] = useState('daily');
   const [description, setDescription] = useState('');
-  const [progress, setProgress] = useState('');
   const [saving, setSaving] = useState(false);
 
   const fetchTasks = useCallback(async () => {
@@ -59,44 +63,50 @@ export default function MyTasksScreen() {
     setSelectedTask(task);
     setEntryMode(mode);
     setDescription('');
-    setProgress('');
+  };
+
+  const resetEntry = () => {
+    Keyboard.dismiss();
+    setSelectedTask(null);
+    setDescription('');
+  };
+
+  const cancelEntry = () => {
+    if (saving) return;
+
+    if (!description.trim()) {
+      resetEntry();
+      return;
+    }
+
+    Keyboard.dismiss();
+    Alert.alert(
+      'Hủy ghi chép?',
+      'Nội dung bạn đang nhập sẽ không được lưu.',
+      [
+        { text: 'Tiếp tục nhập', style: 'cancel' },
+        { text: 'Bỏ nội dung', style: 'destructive', onPress: resetEntry },
+      ],
+    );
   };
 
   const submitEntry = async () => {
-    const numericProgress = Number(progress);
-    if (!description.trim() || (entryMode === 'daily' && (!Number.isFinite(numericProgress) || numericProgress < 0 || numericProgress > 100))) {
-      Alert.alert('Thiếu thông tin', entryMode === 'daily' ? 'Nhập mô tả và tiến độ từ 0 đến 100%.' : 'Nhập nội dung tổng hợp công việc.');
+    if (!description.trim()) {
+      Alert.alert('Thiếu thông tin', 'Nhập nội dung tổng hợp công việc.');
       return;
     }
 
     setSaving(true);
     try {
-      if (entryMode === 'daily') {
-        await api.post('/cultivation-daily-logs', {
-          taskId: getEntityId(selectedTask),
-          date: new Date().toISOString(),
-          progress: numericProgress,
-          description: description.trim(),
-          weather: '',
-          temperature: 0,
-          humidity: 0,
-          fertilizers: [],
-          pesticides: [],
-          images: [],
-        });
-      } else {
-        await api.post(`/cultivation-tasks/${getEntityId(selectedTask)}/summary`, {
-          totalFertilizers: [],
-          totalPesticides: [],
-          images: [],
-          descriptionSummary: description.trim(),
-          completedAt: new Date().toISOString(),
-        });
-      }
-      setSelectedTask(null);
-      setDescription('');
-      setProgress('');
-      Alert.alert('Thành công', entryMode === 'daily' ? 'Đã lưu ghi chép công việc.' : 'Đã gửi tổng hợp công việc.');
+      await api.post(`/cultivation-tasks/${getEntityId(selectedTask)}/summary`, {
+        totalFertilizers: [],
+        totalPesticides: [],
+        images: [],
+        descriptionSummary: description.trim(),
+        completedAt: new Date().toISOString(),
+      });
+      resetEntry();
+      Alert.alert('Thành công', 'Đã gửi tổng hợp công việc.');
       fetchTasks();
     } catch (requestError) {
       Alert.alert('Không thể lưu', getApiErrorMessage(requestError, 'Vui lòng thử lại.'));
@@ -174,19 +184,34 @@ export default function MyTasksScreen() {
         ListEmptyComponent={<View style={styles.empty}><Feather name="check-square" size={48} color="#cbd5e1" /><Text style={styles.emptyText}>Không có công việc</Text></View>}
       />
 
-      <Modal visible={Boolean(selectedTask)} transparent animationType="slide" onRequestClose={() => setSelectedTask(null)}>
-        <View style={styles.modalBackdrop}>
+      <DailyLogModal
+        visible={Boolean(selectedTask) && entryMode === 'daily'}
+        task={selectedTask}
+        onClose={resetEntry}
+        onSaved={fetchTasks}
+      />
+
+      <Modal visible={Boolean(selectedTask) && entryMode === 'summary'} transparent animationType="slide" onRequestClose={cancelEntry}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={cancelEntry} accessibilityLabel="Đóng form ghi chép" />
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{entryMode === 'daily' ? 'Ghi chép hằng ngày' : 'Tổng hợp công việc'}</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Tổng hợp công việc</Text>
+              <TouchableOpacity style={styles.closeButton} onPress={cancelEntry} disabled={saving} accessibilityLabel="Hủy ghi chép">
+                <Feather name="x" size={22} color="#64748b" />
+              </TouchableOpacity>
+            </View>
             <Text style={styles.modalTask} numberOfLines={2}>{valueOf(selectedTask?.taskName, selectedTask?.name, selectedTask?.title)}</Text>
-            {entryMode === 'daily' ? <TextInput style={styles.input} placeholder="Tiến độ (%)" keyboardType="number-pad" value={progress} onChangeText={setProgress} /> : null}
-            <TextInput style={[styles.input, styles.textarea]} placeholder={entryMode === 'daily' ? 'Mô tả công việc đã thực hiện' : 'Nội dung tổng hợp sau khi hoàn thành'} multiline value={description} onChangeText={setDescription} />
+            <TextInput style={[styles.input, styles.textarea]} placeholder="Nội dung tổng hợp sau khi hoàn thành" placeholderTextColor="#64748b" multiline value={description} onChangeText={setDescription} />
             <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setSelectedTask(null)} disabled={saving}><Text style={styles.cancelText}>Hủy</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={submitEntry} disabled={saving}>{saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{entryMode === 'daily' ? 'Lưu ghi chép' : 'Gửi tổng hợp'}</Text>}</TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={cancelEntry} disabled={saving}><Text style={styles.cancelText}>Hủy</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={submitEntry} disabled={saving}>{saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Gửi tổng hợp</Text>}</TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -222,7 +247,9 @@ const styles = StyleSheet.create({
   emptyText: { color: '#94a3b8', marginTop: 12, fontWeight: '600' },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#0008' },
   modalCard: { backgroundColor: '#fff', padding: 20, paddingBottom: 30, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  modalTitle: { color: '#0f172a', fontSize: 20, fontWeight: '900' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  modalTitle: { flex: 1, color: '#0f172a', fontSize: 20, fontWeight: '900' },
+  closeButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' },
   modalTask: { color: '#15803d', fontWeight: '700', marginTop: 5, marginBottom: 16 },
   input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 12, color: '#0f172a' },
   textarea: { minHeight: 100, textAlignVertical: 'top' },

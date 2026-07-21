@@ -1,5 +1,6 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
+import NotificationDetailScreen from '../features/notifications/screens/NotificationDetailScreen';
 import AccountInfoScreen from '../features/profile/screens/AccountInfoScreen';
 import ChangePasswordScreen from '../features/profile/screens/ChangePasswordScreen';
 import SettingsScreen from '../features/profile/screens/SettingsScreen';
@@ -14,6 +15,7 @@ export default function AuthenticatedNavigator() {
       <Stack.Screen name="AccountInfo" component={AccountInfoScreen} />
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="NotificationDetail" component={NotificationDetailScreen} />
     </Stack.Navigator>
   );
 }
