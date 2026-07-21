@@ -22,6 +22,26 @@ import { useAuthStore } from '../../auth/store/authStore';
 
 const GENDERS = ['Nam', 'Nữ', 'Khác'];
 
+const normalizeDateOnly = (value) => {
+  if (!value) return '';
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : '';
+};
+
+const dateToDateOnly = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const dateOnlyToLocalDate = (value) => {
+  const normalized = normalizeDateOnly(value);
+  if (!normalized) return null;
+  const [year, month, day] = normalized.split('-').map(Number);
+  return new Date(year, month - 1, day, 12, 0, 0);
+};
+
 export default function AccountInfoScreen({ navigation }) {
   const { user, setUser, refreshCurrentUser } = useAuthStore();
   const queryClient = useQueryClient();
@@ -33,7 +53,7 @@ export default function AccountInfoScreen({ navigation }) {
     fullname: user?.fullname || '',
     phone: user?.phone || '',
     address: user?.address || '',
-    dateOfBirth: user?.dateOfBirth || '',
+    dateOfBirth: normalizeDateOnly(user?.dateOfBirth),
     gender: user?.gender || '',
   });
 
@@ -93,9 +113,9 @@ export default function AccountInfoScreen({ navigation }) {
     if (phone && !/^[0-9]{10,11}$/.test(phone)) errors.push('Số điện thoại phải gồm 10-11 chữ số.');
 
     if (formData.dateOfBirth) {
-      const birthDate = new Date(formData.dateOfBirth);
-      if (Number.isNaN(birthDate.getTime())) errors.push('Ngày sinh không hợp lệ.');
-      if (birthDate > new Date()) errors.push('Ngày sinh không được lớn hơn ngày hiện tại.');
+      const birthDate = dateOnlyToLocalDate(formData.dateOfBirth);
+      if (!birthDate || Number.isNaN(birthDate.getTime())) errors.push('Ngày sinh không hợp lệ.');
+      if (birthDate && birthDate > new Date()) errors.push('Ngày sinh không được lớn hơn ngày hiện tại.');
     }
 
     return errors;
@@ -188,7 +208,7 @@ export default function AccountInfoScreen({ navigation }) {
 
   // Mở picker: lưu giá trị hiện tại vào tempDate
   const openDatePicker = () => {
-    setTempDate(formData.dateOfBirth ? new Date(formData.dateOfBirth) : new Date(1990, 0, 1));
+    setTempDate(dateOnlyToLocalDate(formData.dateOfBirth) || new Date(1990, 0, 1, 12));
     setShowDatePicker(true);
   };
 
@@ -196,7 +216,7 @@ export default function AccountInfoScreen({ navigation }) {
   const handleDateChangeAndroid = (_event, selectedDate) => {
     setShowDatePicker(false);
     if (_event.type === 'set' && selectedDate) {
-      updateField('dateOfBirth', selectedDate.toISOString());
+      updateField('dateOfBirth', dateToDateOnly(selectedDate));
     }
   };
 
@@ -207,7 +227,7 @@ export default function AccountInfoScreen({ navigation }) {
 
   // iOS: bấm "Xong" mới apply
   const confirmDateIOS = () => {
-    if (tempDate) updateField('dateOfBirth', tempDate.toISOString());
+    if (tempDate) updateField('dateOfBirth', dateToDateOnly(tempDate));
     setShowDatePicker(false);
   };
 
@@ -218,10 +238,8 @@ export default function AccountInfoScreen({ navigation }) {
   };
 
   const formatDate = (value) => {
-    if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleDateString('vi-VN');
+    const date = dateOnlyToLocalDate(value);
+    return date ? date.toLocaleDateString('vi-VN') : '';
   };
 
   const renderInput = ({ label, field, placeholder, keyboardType = 'default', multiline = false, editable = true }) => (
@@ -346,7 +364,7 @@ export default function AccountInfoScreen({ navigation }) {
       {/* Android: picker hiện thẳng (là dialog native, không cần Modal) */}
       {showDatePicker && Platform.OS === 'android' && (
         <DateTimePicker
-          value={formData.dateOfBirth ? new Date(formData.dateOfBirth) : new Date(1990, 0, 1)}
+          value={dateOnlyToLocalDate(formData.dateOfBirth) || new Date(1990, 0, 1, 12)}
           mode="date"
           display="default"
           maximumDate={new Date()}
@@ -373,15 +391,20 @@ export default function AccountInfoScreen({ navigation }) {
                 <Text style={styles.modalDoneText}>Xong</Text>
               </TouchableOpacity>
             </View>
-            <DateTimePicker
-              value={tempDate || new Date(1990, 0, 1)}
-              mode="date"
-              display="spinner"
-              maximumDate={new Date()}
-              onChange={handleDateChangeIOS}
-              locale="vi-VN"
-              style={styles.iosPicker}
-            />
+            <View style={styles.iosPickerFrame}>
+              <DateTimePicker
+                value={tempDate || new Date(1990, 0, 1)}
+                mode="date"
+                display="spinner"
+                maximumDate={new Date()}
+                onChange={handleDateChangeIOS}
+                locale="vi-VN"
+                themeVariant="light"
+                textColor="#111827"
+                accentColor="#16a34a"
+                style={styles.iosPicker}
+              />
+            </View>
           </View>
         </Modal>
       )}
@@ -505,5 +528,14 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 16, fontWeight: '700', color: '#1f2937' },
   modalCancelText: { fontSize: 15, color: '#64748b', fontWeight: '600' },
   modalDoneText: { fontSize: 15, color: '#16a34a', fontWeight: '700' },
-  iosPicker: { width: '100%' },
+  iosPickerFrame: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderWidth: 2,
+    borderColor: '#22c55e',
+    borderRadius: 16,
+    backgroundColor: '#f0fdf4',
+    overflow: 'hidden',
+  },
+  iosPicker: { width: '100%', height: 216, backgroundColor: '#fff' },
 });

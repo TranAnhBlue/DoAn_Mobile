@@ -1,81 +1,51 @@
 import { Feather } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
-import AIScreen from '../features/ai/screens/AIScreen';
-import { useAuthStore } from '../features/auth/store/authStore';
-import { isFarmer } from '../features/auth/utils/roles';
-import HomeScreen from '../features/dashboard/screens/HomeScreen';
-import JournalListScreen from '../features/journals/screens/JournalListScreen';
+import NotificationsScreen from '../features/notifications/screens/NotificationsScreen';
+import MyTasksScreen from '../features/production/screens/MyTasksScreen';
+import PlansAndLogsScreen from '../features/production/screens/PlansAndLogsScreen';
+import LandPlotsScreen from '../features/production/screens/LandPlotsScreen';
 import ProfileScreen from '../features/profile/screens/ProfileScreen';
-import ScannerScreen from '../features/traceability/screens/ScannerScreen';
 
 const Tab = createBottomTabNavigator();
 
-const TAB_ICON = {
-  Home: 'home',
-  Journals: 'book',
-  Scanner: 'grid',
-  AI: 'cpu',
-  Profile: 'user',
-};
-
-const TAB_LABEL = {
-  Home: 'Trang chủ',
-  Journals: 'Nhật ký',
-  Scanner: 'Truy xuất',
-  AI: 'Hỏi AI',
-  Profile: 'Tài khoản',
-};
+const TABS = [
+  { name: 'PlansAndLogs', label: 'Kế hoạch', icon: 'book-open', component: PlansAndLogsScreen },
+  { name: 'MyTasks', label: 'Công việc', icon: 'check-square', component: MyTasksScreen },
+  { name: 'Notifications', label: 'Thông báo', icon: 'bell', component: NotificationsScreen },
+  { name: 'LandPlots', label: 'Vùng trồng', icon: 'map', component: LandPlotsScreen },
+  { name: 'Profile', label: 'Cá nhân', icon: 'user', component: ProfileScreen },
+];
 
 export default function MainTabNavigator() {
-  const user = useAuthStore((state) => state.user);
-  const farmerMode = isFarmer(user?.role || user?.roles?.[0]);
-  const tabs = farmerMode
-    ? [
-        { name: 'Home', component: HomeScreen },
-        { name: 'Journals', component: JournalListScreen },
-        { name: 'Scanner', component: ScannerScreen },
-        { name: 'Profile', component: ProfileScreen },
-      ]
-    : [
-        { name: 'Home', component: HomeScreen },
-        { name: 'Journals', component: JournalListScreen },
-        { name: 'Scanner', component: ScannerScreen },
-        { name: 'AI', component: AIScreen },
-        { name: 'Profile', component: ProfileScreen },
-      ];
-
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => {
-        const hiddenTab = route.name === 'Journals';
-        return {
-          headerShown: false,
-          tabBarButton: hiddenTab ? () => null : undefined,
-          tabBarItemStyle: hiddenTab ? { display: 'none' } : undefined,
-          tabBarIcon: ({ color, size }) => (
-            <Feather name={TAB_ICON[route.name]} size={size} color={color} />
-          ),
-          tabBarActiveTintColor: '#16a34a',
-          tabBarInactiveTintColor: '#94a3b8',
-          tabBarLabel: TAB_LABEL[route.name],
-          tabBarStyle: {
-            height: 72,
-            paddingBottom: 20,
-            paddingTop: 5,
-            backgroundColor: '#fff',
-            borderTopWidth: 1,
-            borderTopColor: '#f1f5f9',
-          },
-          tabBarLabelStyle: {
-            fontSize: 10,
-            fontWeight: '600',
-          },
-        };
-      }}
+      initialRouteName="PlansAndLogs"
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarIcon: ({ color, size }) => {
+          const tab = TABS.find((item) => item.name === route.name);
+          return <Feather name={tab?.icon || 'circle'} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: '#15803d',
+        tabBarInactiveTintColor: '#94a3b8',
+        tabBarStyle: {
+          height: 72,
+          paddingBottom: 18,
+          paddingTop: 7,
+          backgroundColor: '#fff',
+          borderTopColor: '#e2e8f0',
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
+      })}
     >
-      {tabs.map((tab) => (
-        <Tab.Screen key={tab.name} name={tab.name} component={tab.component} />
+      {TABS.map((tab) => (
+        <Tab.Screen
+          key={tab.name}
+          name={tab.name}
+          component={tab.component}
+          options={{ tabBarLabel: tab.label }}
+        />
       ))}
     </Tab.Navigator>
   );
