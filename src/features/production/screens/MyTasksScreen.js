@@ -2,404 +2,234 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+
 import api from '../../../shared/api/client';
+import { extractItems, getApiErrorMessage, getEntityId } from '../../../shared/api/response';
 
-const PRIORITY_COLORS = {
-  LOW: '#10b981',
-  MEDIUM: '#f59e0b',
-  HIGH: '#ef4444',
-  URGENT: '#dc2626',
+const STATUS = {
+  PENDING: ['Chờ thực hiện', '#64748b'],
+  PLANNED: ['Đã lên lịch', '#2563eb'],
+  IN_PROGRESS: ['Đang thực hiện', '#15803d'],
+  COMPLETED: ['Hoàn thành', '#059669'],
+  CANCELLED: ['Đã hủy', '#64748b'],
 };
 
-const PRIORITY_LABELS = {
-  LOW: 'Thấp',
-  MEDIUM: 'Trung bình',
-  HIGH: 'Cao',
-  URGENT: 'Khẩn cấp',
-};
+const valueOf = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
+const dateOf = (value) => value ? new Date(value).toLocaleDateString('vi-VN') : 'Chưa xác định';
 
-const STATUS_COLORS = {
-  PENDING: '#94a3b8',
-  IN_PROGRESS: '#3b82f6',
-  COMPLETED: '#16a34a',
-  CANCELLED: '#64748b',
-};
-
-const STATUS_LABELS = {
-  PENDING: 'Chờ xử lý',
-  IN_PROGRESS: 'Đang thực hiện',
-  COMPLETED: 'Hoàn thành',
-  CANCELLED: 'Đã hủy',
-};
-
-export default function MyTasksScreen({ navigation }) {
+export default function MyTasksScreen() {
   const [tasks, setTasks] = useState([]);
+  const [filter, setFilter] = useState('ALL');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('ALL'); // ALL, PENDING, IN_PROGRESS, COMPLETED
+  const [error, setError] = useState('');
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [entryMode, setEntryMode] = useState('daily');
+  const [description, setDescription] = useState('');
+  const [progress, setProgress] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const fetchTasks = useCallback(async () => {
+    setError('');
     try {
-      const response = await api.get('/tasks/my-tasks');
-      if (response.data?.success) {
-        setTasks(response.data.data || []);
-      }
-    } catch (error) {
-      console.error('Fetch My Tasks Error:', error);
+      const response = await api.get('/cultivation-tasks', { params: { PageIndex: 1, PageSize: 100 } });
+      setTasks(extractItems(response.data));
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError, 'Không thể tải công việc.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchTasks();
-    }, [fetchTasks])
-  );
+  useFocusEffect(useCallback(() => { fetchTasks(); }, [fetchTasks]));
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchTasks();
+  const openEntry = (task, mode) => {
+    setSelectedTask(task);
+    setEntryMode(mode);
+    setDescription('');
+    setProgress('');
   };
 
-  const handleStartTask = async (taskId) => {
+  const submitEntry = async () => {
+    const numericProgress = Number(progress);
+    if (!description.trim() || (entryMode === 'daily' && (!Number.isFinite(numericProgress) || numericProgress < 0 || numericProgress > 100))) {
+      Alert.alert('Thiếu thông tin', entryMode === 'daily' ? 'Nhập mô tả và tiến độ từ 0 đến 100%.' : 'Nhập nội dung tổng hợp công việc.');
+      return;
+    }
+
+    setSaving(true);
     try {
-      await api.post(`/tasks/${taskId}/start`);
+      if (entryMode === 'daily') {
+        await api.post('/cultivation-daily-logs', {
+          taskId: getEntityId(selectedTask),
+          date: new Date().toISOString(),
+          progress: numericProgress,
+          description: description.trim(),
+          weather: '',
+          temperature: 0,
+          humidity: 0,
+          fertilizers: [],
+          pesticides: [],
+          images: [],
+        });
+      } else {
+        await api.post(`/cultivation-tasks/${getEntityId(selectedTask)}/summary`, {
+          totalFertilizers: [],
+          totalPesticides: [],
+          images: [],
+          descriptionSummary: description.trim(),
+          completedAt: new Date().toISOString(),
+        });
+      }
+      setSelectedTask(null);
+      setDescription('');
+      setProgress('');
+      Alert.alert('Thành công', entryMode === 'daily' ? 'Đã lưu ghi chép công việc.' : 'Đã gửi tổng hợp công việc.');
       fetchTasks();
-    } catch (error) {
-      console.error('Start Task Error:', error);
+    } catch (requestError) {
+      Alert.alert('Không thể lưu', getApiErrorMessage(requestError, 'Vui lòng thử lại.'));
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleCompleteTask = async (taskId) => {
-    try {
-      await api.post(`/tasks/${taskId}/complete`);
-      fetchTasks();
-    } catch (error) {
-      console.error('Complete Task Error:', error);
-    }
-  };
-
-  const openJournalForTask = (task) => {
-    navigation.navigate('Journals', {
-      sourceContext: {
-        sourceType: 'task',
-        taskId: task.id || task._id,
-        productionPlanId: task.productionPlanId || task.planId,
-        landPlotId: task.landPlotId,
-        title: task.title,
-        landPlotName: task.landPlotName,
-        dueDate: task.dueDate,
+  const completeTask = (task) => {
+    Alert.alert('Hoàn thành công việc', 'Xác nhận công việc này đã hoàn thành?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Xác nhận',
+        onPress: async () => {
+          try {
+            await api.post(`/cultivation-tasks/${getEntityId(task)}/complete`);
+            fetchTasks();
+          } catch (requestError) {
+            Alert.alert('Không thể hoàn thành', getApiErrorMessage(requestError, 'Vui lòng thử lại.'));
+          }
+        },
       },
-    });
+    ]);
   };
 
-  const filteredTasks = filter === 'ALL' 
-    ? tasks 
-    : tasks.filter(task => task.status === filter);
+  const filteredTasks = filter === 'ALL'
+    ? tasks
+    : tasks.filter((task) => String(task.status || '').toUpperCase() === filter);
 
-  const renderTask = ({ item }) => (
-    <View style={styles.taskCard}>
-      <View style={styles.taskHeader}>
-        <View style={[styles.priorityBadge, { backgroundColor: `${PRIORITY_COLORS[item.priority]}20` }]}>
-          <Text style={[styles.priorityText, { color: PRIORITY_COLORS[item.priority] }]}>
-            {PRIORITY_LABELS[item.priority]}
-          </Text>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: `${STATUS_COLORS[item.status]}20` }]}>
-          <Text style={[styles.statusText, { color: STATUS_COLORS[item.status] }]}>
-            {STATUS_LABELS[item.status]}
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.taskTitle}>{item.title}</Text>
-      {item.description && (
-        <Text style={styles.taskDescription} numberOfLines={2}>
-          {item.description}
-        </Text>
-      )}
-
-      <View style={styles.taskMeta}>
-        <View style={styles.metaItem}>
-          <Feather name="calendar" size={14} color="#64748b" />
-          <Text style={styles.metaText}>
-            {new Date(item.dueDate).toLocaleDateString('vi-VN')}
-          </Text>
-        </View>
-        {item.landPlotName && (
-          <View style={styles.metaItem}>
-            <Feather name="map-pin" size={14} color="#64748b" />
-            <Text style={styles.metaText} numberOfLines={1}>
-              {item.landPlotName}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {item.status === 'PENDING' && (
-        <TouchableOpacity
-          style={[styles.actionButton, styles.startButton]}
-          onPress={() => handleStartTask(item.id)}
-        >
-          <Feather name="play" size={16} color="#fff" />
-          <Text style={styles.actionButtonText}>Bắt đầu</Text>
-        </TouchableOpacity>
-      )}
-
-      {item.status === 'IN_PROGRESS' && (
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.journalButton]}
-            onPress={() => openJournalForTask(item)}
-          >
-            <Feather name="book-open" size={16} color="#fff" />
-            <Text style={styles.actionButtonText}>Ghi nhật ký</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.completeButton]}
-            onPress={() => handleCompleteTask(item.id)}
-          >
-            <Feather name="check" size={16} color="#fff" />
-            <Text style={styles.actionButtonText}>Hoàn thành</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {item.status === 'COMPLETED' && (
-        <TouchableOpacity
-          style={[styles.actionButton, styles.journalButton]}
-          onPress={() => openJournalForTask(item)}
-        >
-          <Feather name="book-open" size={16} color="#fff" />
-          <Text style={styles.actionButtonText}>Ghi nhật ký theo dõi</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#16a34a" />
-      </View>
-    );
-  }
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#15803d" /></View>;
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Feather name="arrow-left" size={24} color="#fff" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Công việc của tôi</Text>
-        <View style={styles.placeholder} />
+        <Text style={styles.headerSubtitle}>Cập nhật tiến độ và ghi chép hằng ngày</Text>
       </View>
-
-      <View style={styles.filterContainer}>
-        {['ALL', 'PENDING', 'IN_PROGRESS', 'COMPLETED'].map((status) => (
-          <TouchableOpacity
-            key={status}
-            style={[styles.filterButton, filter === status && styles.filterButtonActive]}
-            onPress={() => setFilter(status)}
-          >
-            <Text style={[styles.filterText, filter === status && styles.filterTextActive]}>
-              {status === 'ALL' ? 'Tất cả' : STATUS_LABELS[status]}
-            </Text>
+      <View style={styles.filters}>
+        {[['ALL', 'Tất cả'], ['PLANNED', 'Đã lên lịch'], ['IN_PROGRESS', 'Đang làm'], ['COMPLETED', 'Xong']].map(([key, label]) => (
+          <TouchableOpacity key={key} style={[styles.filter, filter === key && styles.filterActive]} onPress={() => setFilter(key)}>
+            <Text style={[styles.filterText, filter === key && styles.filterTextActive]}>{label}</Text>
           </TouchableOpacity>
         ))}
       </View>
-
+      {error ? <Text style={styles.error}>{error}</Text> : null}
       <FlatList
         data={filteredTasks}
-        renderItem={renderTask}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#16a34a']} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Feather name="inbox" size={48} color="#cbd5e1" />
-            <Text style={styles.emptyText}>Không có công việc nào</Text>
-          </View>
-        }
+        keyExtractor={(item, index) => String(getEntityId(item) || index)}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchTasks(); }} colors={['#15803d']} />}
+        renderItem={({ item }) => {
+          const state = String(item.status || '').toUpperCase();
+          const [label, color] = STATUS[state] || [item.status || 'Không rõ', '#64748b'];
+          const canWriteLog = state === 'IN_PROGRESS';
+          const canSubmitSummary = state === 'COMPLETED';
+          return (
+            <View style={styles.card}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.cardTitle}>{valueOf(item.taskName, item.name, item.title, 'Công việc canh tác')}</Text>
+                <View style={[styles.badge, { backgroundColor: `${color}18` }]}><Text style={[styles.badgeText, { color }]}>{label}</Text></View>
+              </View>
+              {item.description ? <Text style={styles.description}>{item.description}</Text> : null}
+              <View style={styles.metaRow}><Feather name="calendar" size={14} color="#64748b" /><Text style={styles.meta}>{dateOf(valueOf(item.dueDate, item.endDate, item.plannedEndDate))}</Text></View>
+              <View style={styles.metaRow}><Feather name="map-pin" size={14} color="#64748b" /><Text style={styles.meta}>{valueOf(item.landPlotName, item.landPlot?.name, item.logbookName, 'Chưa có vùng trồng')}</Text></View>
+              {canWriteLog || canSubmitSummary ? (
+                <View style={styles.actions}>
+                  {canWriteLog ? <TouchableOpacity style={[styles.action, styles.logAction]} onPress={() => openEntry(item, 'daily')}><Feather name="edit-3" size={15} color="#fff" /><Text style={styles.actionText}>Ghi chép</Text></TouchableOpacity> : null}
+                  {canWriteLog ? <TouchableOpacity style={[styles.action, styles.completeAction]} onPress={() => completeTask(item)}><Feather name="check" size={16} color="#fff" /><Text style={styles.actionText}>Hoàn thành</Text></TouchableOpacity> : null}
+                  {canSubmitSummary ? <TouchableOpacity style={[styles.action, styles.logAction]} onPress={() => openEntry(item, 'summary')}><Feather name="file-text" size={15} color="#fff" /><Text style={styles.actionText}>Gửi tổng hợp</Text></TouchableOpacity> : null}
+                </View>
+              ) : null}
+            </View>
+          );
+        }}
+        ListEmptyComponent={<View style={styles.empty}><Feather name="check-square" size={48} color="#cbd5e1" /><Text style={styles.emptyText}>Không có công việc</Text></View>}
       />
+
+      <Modal visible={Boolean(selectedTask)} transparent animationType="slide" onRequestClose={() => setSelectedTask(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{entryMode === 'daily' ? 'Ghi chép hằng ngày' : 'Tổng hợp công việc'}</Text>
+            <Text style={styles.modalTask} numberOfLines={2}>{valueOf(selectedTask?.taskName, selectedTask?.name, selectedTask?.title)}</Text>
+            {entryMode === 'daily' ? <TextInput style={styles.input} placeholder="Tiến độ (%)" keyboardType="number-pad" value={progress} onChangeText={setProgress} /> : null}
+            <TextInput style={[styles.input, styles.textarea]} placeholder={entryMode === 'daily' ? 'Mô tả công việc đã thực hiện' : 'Nội dung tổng hợp sau khi hoàn thành'} multiline value={description} onChangeText={setDescription} />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setSelectedTask(null)} disabled={saving}><Text style={styles.cancelText}>Hủy</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={submitEntry} disabled={saving}>{saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{entryMode === 'daily' ? 'Lưu ghi chép' : 'Gửi tổng hợp'}</Text>}</TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f6fbf7',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f6fbf7',
-  },
-  header: {
-    backgroundColor: '#27c65a',
-    paddingTop: 42,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  placeholder: {
-    width: 40,
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  filterButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  filterButtonActive: {
-    backgroundColor: '#16a34a',
-    borderColor: '#16a34a',
-  },
-  filterText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#64748b',
-  },
-  filterTextActive: {
-    color: '#fff',
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 96,
-  },
-  taskCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  taskHeader: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  priorityText: {
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  taskTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  taskDescription: {
-    fontSize: 14,
-    color: '#64748b',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  taskMeta: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 12,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flex: 1,
-  },
-  metaText: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: '600',
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  startButton: {
-    backgroundColor: '#3b82f6',
-  },
-  journalButton: {
-    flex: 1,
-    backgroundColor: '#2563eb',
-  },
-  completeButton: {
-    flex: 1,
-    backgroundColor: '#16a34a',
-  },
-  actionButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 64,
-  },
-  emptyText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#94a3b8',
-    fontWeight: '600',
-  },
+  container: { flex: 1, backgroundColor: '#f6fbf7' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f6fbf7' },
+  header: { backgroundColor: '#15803d', paddingTop: 52, paddingHorizontal: 20, paddingBottom: 18 },
+  headerTitle: { color: '#fff', fontSize: 23, fontWeight: '900' },
+  headerSubtitle: { color: '#dcfce7', marginTop: 4, fontSize: 13 },
+  filters: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 12, gap: 6 },
+  filter: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0' },
+  filterActive: { backgroundColor: '#15803d', borderColor: '#15803d' },
+  filterText: { color: '#64748b', fontSize: 11, fontWeight: '700' },
+  filterTextActive: { color: '#fff' },
+  list: { paddingHorizontal: 16, paddingBottom: 96 },
+  card: { backgroundColor: '#fff', borderRadius: 15, padding: 16, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8 },
+  rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
+  cardTitle: { flex: 1, color: '#0f172a', fontSize: 16, fontWeight: '800' },
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  badgeText: { fontSize: 10, fontWeight: '900' },
+  description: { color: '#475569', lineHeight: 20, marginTop: 9 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8 },
+  meta: { flex: 1, color: '#64748b', fontSize: 13 },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  action: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 7, paddingVertical: 10, borderRadius: 10 },
+  logAction: { backgroundColor: '#2563eb' },
+  completeAction: { backgroundColor: '#15803d' },
+  actionText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  error: { color: '#b91c1c', paddingHorizontal: 16, paddingBottom: 10 },
+  empty: { alignItems: 'center', paddingTop: 64 },
+  emptyText: { color: '#94a3b8', marginTop: 12, fontWeight: '600' },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#0008' },
+  modalCard: { backgroundColor: '#fff', padding: 20, paddingBottom: 30, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  modalTitle: { color: '#0f172a', fontSize: 20, fontWeight: '900' },
+  modalTask: { color: '#15803d', fontWeight: '700', marginTop: 5, marginBottom: 16 },
+  input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 12, color: '#0f172a' },
+  textarea: { minHeight: 100, textAlignVertical: 'top' },
+  modalActions: { flexDirection: 'row', gap: 10 },
+  modalButton: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 46, borderRadius: 12 },
+  cancelButton: { backgroundColor: '#f1f5f9' },
+  saveButton: { backgroundColor: '#15803d' },
+  cancelText: { color: '#475569', fontWeight: '800' },
+  saveText: { color: '#fff', fontWeight: '800' },
 });

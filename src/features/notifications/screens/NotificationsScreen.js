@@ -1,280 +1,78 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
 import api from '../../../shared/api/client';
+import { extractItems, getEntityId } from '../../../shared/api/response';
 
-export default function NotificationsScreen({ navigation }) {
-  const [refreshing, setRefreshing] = useState(false);
+const dateLabel = (value) => value ? new Date(value).toLocaleString('vi-VN') : '';
+
+export default function NotificationsScreen() {
   const queryClient = useQueryClient();
-
-  const { data: notifications = [], isLoading, refetch } = useQuery({
-    queryKey: ['notifications'],
+  const query = useQuery({
+    queryKey: ['notifications', 'mine'],
     queryFn: async () => {
-      const { data } = await api.get('/notifications');
-      return data.data || [];
+      const response = await api.get('/notifications/mine', { params: { PageIndex: 1, PageSize: 100 } });
+      return extractItems(response.data);
     },
   });
 
-  const markAllMutation = useMutation({
-    mutationFn: () => api.put('/notifications/read-all'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    },
-  });
-
-  const markAsReadMutation = useMutation({
-    mutationFn: (id) => api.put(`/notifications/${id}/read`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    },
-  });
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await refetch();
-    setRefreshing(false);
-  };
-
-  const getNotificationIcon = (type) => {
-    const normalizedType = String(type || '').toLowerCase();
-    if (normalizedType.includes('journal')) return 'book';
-    if (normalizedType.includes('verified') || normalizedType.includes('approved')) {
-        return 'check-circle';
-    }
-    if (normalizedType.includes('rejected') || normalizedType.includes('revision')) return 'x-circle';
-    if (normalizedType.includes('system')) return 'bell';
-    if (normalizedType.includes('news')) return 'file-text';
-    return 'info';
-  };
-
-  const getNotificationColor = (type) => {
-    const normalizedType = String(type || '').toLowerCase();
-    if (normalizedType.includes('journal')) return '#3b82f6';
-    if (normalizedType.includes('verified') || normalizedType.includes('approved')) return '#22c55e';
-    if (normalizedType.includes('rejected') || normalizedType.includes('revision')) return '#ef4444';
-    if (normalizedType.includes('system')) return '#f59e0b';
-    if (normalizedType.includes('news')) return '#8b5cf6';
-    return '#6b7280';
-  };
-
-  const formatTime = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Vừa xong';
-    if (diffMins < 60) return `${diffMins} phút trước`;
-    if (diffHours < 24) return `${diffHours} giờ trước`;
-    if (diffDays < 7) return `${diffDays} ngày trước`;
-    return date.toLocaleDateString('vi-VN');
-  };
-
-  if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#22c55e" />
-      </View>
-    );
-  }
+  const refreshNotifications = () => queryClient.invalidateQueries({ queryKey: ['notifications'] });
+  const markRead = useMutation({ mutationFn: (id) => api.post(`/notifications/${id}/read`), onSuccess: refreshNotifications });
+  const markAll = useMutation({ mutationFn: () => api.post('/notifications/read-all'), onSuccess: refreshNotifications });
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Feather name="arrow-left" size={24} color="#1f2937" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Thông báo</Text>
-        <TouchableOpacity
-          style={styles.headerAction}
-          onPress={() => markAllMutation.mutate()}
-          disabled={markAllMutation.isPending || notifications.length === 0}
-        >
-          <Feather name="check-circle" size={20} color="#6b7280" />
-        </TouchableOpacity>
+        <View>
+          <Text style={styles.headerTitle}>Thông báo</Text>
+          <Text style={styles.headerSubtitle}>Cập nhật dành riêng cho bạn</Text>
+        </View>
+        <TouchableOpacity style={styles.headerButton} onPress={() => markAll.mutate()} disabled={!query.data?.length || markAll.isPending} accessibilityLabel="Đánh dấu tất cả đã đọc"><Feather name="check-circle" size={21} color="#fff" /></TouchableOpacity>
       </View>
-
-      {/* Notifications List */}
-      <ScrollView
-        style={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#22c55e']} />
-        }
-      >
-        {notifications.length > 0 ? (
-          notifications.map((notification, index) => (
-            <TouchableOpacity
-              key={notification._id || index}
-              style={[
-                styles.notificationCard,
-                !notification.isRead && styles.notificationUnread,
-              ]}
-              onPress={() => {
-                if (!notification.isRead && notification._id) {
-                  markAsReadMutation.mutate(notification._id);
-                }
-              }}
-            >
-              <View
-                style={[
-                  styles.iconContainer,
-                  { backgroundColor: `${getNotificationColor(notification.type)}15` },
-                ]}
-              >
-                <Feather
-                  name={getNotificationIcon(notification.type)}
-                  size={24}
-                  color={getNotificationColor(notification.type)}
-                />
+      {query.isError ? <Text style={styles.error}>Không thể tải thông báo. Kéo xuống để thử lại.</Text> : null}
+      <FlatList
+        data={query.data || []}
+        keyExtractor={(item, index) => String(getEntityId(item) || index)}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={query.isFetching} onRefresh={query.refetch} colors={['#15803d']} />}
+        renderItem={({ item }) => {
+          const unread = !(item.isRead ?? item.read);
+          const id = getEntityId(item);
+          return (
+            <TouchableOpacity style={[styles.card, unread && styles.unread]} activeOpacity={unread ? 0.7 : 1} onPress={() => unread && id && markRead.mutate(id)}>
+              <View style={styles.icon}><Feather name={unread ? 'bell' : 'check'} size={20} color={unread ? '#15803d' : '#94a3b8'} /></View>
+              <View style={styles.content}>
+                <Text style={styles.title}>{item.title || 'Thông báo'}</Text>
+                <Text style={styles.message}>{item.message || item.content || ''}</Text>
+                <Text style={styles.date}>{dateLabel(item.createdAt || item.sentAt)}</Text>
               </View>
-
-              <View style={styles.notificationContent}>
-                <Text style={styles.notificationTitle}>{notification.title}</Text>
-                <Text style={styles.notificationMessage} numberOfLines={2}>
-                  {notification.message}
-                </Text>
-                <Text style={styles.notificationTime}>
-                  {formatTime(notification.createdAt)}
-                </Text>
-              </View>
-
-              {!notification.isRead && <View style={styles.unreadDot} />}
+              {unread ? <View style={styles.dot} /> : null}
             </TouchableOpacity>
-          ))
-        ) : (
-          <View style={styles.emptyContainer}>
-            <Feather name="bell-off" size={64} color="#d1d5db" />
-            <Text style={styles.emptyText}>Chưa có thông báo nào</Text>
-            <Text style={styles.emptySubtext}>
-              Các thông báo mới sẽ hiển thị ở đây
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+          );
+        }}
+        ListEmptyComponent={!query.isLoading ? <View style={styles.empty}><Feather name="bell-off" size={48} color="#cbd5e1" /><Text style={styles.emptyText}>Chưa có thông báo</Text></View> : null}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1f2937',
-  },
-  headerAction: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  notificationCard: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  notificationUnread: {
-    backgroundColor: '#f0fdf4',
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-  },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  notificationContent: {
-    flex: 1,
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 4,
-  },
-  notificationMessage: {
-    fontSize: 14,
-    color: '#6b7280',
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: '#9ca3af',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#22c55e',
-    marginLeft: 8,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 80,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#6b7280',
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#9ca3af',
-    marginTop: 8,
-  },
+  container: { flex: 1, backgroundColor: '#f6fbf7' },
+  header: { backgroundColor: '#15803d', paddingTop: 52, paddingHorizontal: 20, paddingBottom: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerTitle: { color: '#fff', fontSize: 23, fontWeight: '900' },
+  headerSubtitle: { color: '#dcfce7', marginTop: 4, fontSize: 13 },
+  headerButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  list: { padding: 16, paddingBottom: 96 },
+  card: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 15, padding: 15, marginBottom: 11, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 },
+  unread: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' },
+  icon: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginRight: 11 },
+  content: { flex: 1 },
+  title: { color: '#0f172a', fontSize: 15, fontWeight: '800' },
+  message: { color: '#475569', lineHeight: 19, marginTop: 4 },
+  date: { color: '#94a3b8', fontSize: 11, marginTop: 7 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#16a34a', marginLeft: 8, marginTop: 5 },
+  error: { color: '#b91c1c', padding: 16, paddingBottom: 0 },
+  empty: { alignItems: 'center', paddingTop: 64 },
+  emptyText: { color: '#94a3b8', marginTop: 12, fontWeight: '600' },
 });
