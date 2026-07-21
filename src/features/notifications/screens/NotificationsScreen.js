@@ -4,10 +4,9 @@ import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } fr
 
 import api from '../../../shared/api/client';
 import { extractItems, getEntityId } from '../../../shared/api/response';
+import { formatVietnamDateTime } from '../utils/dateTime';
 
-const dateLabel = (value) => value ? new Date(value).toLocaleString('vi-VN') : '';
-
-export default function NotificationsScreen() {
+export default function NotificationsScreen({ navigation }) {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ['notifications', 'mine'],
@@ -18,7 +17,6 @@ export default function NotificationsScreen() {
   });
 
   const refreshNotifications = () => queryClient.invalidateQueries({ queryKey: ['notifications'] });
-  const markRead = useMutation({ mutationFn: (id) => api.post(`/notifications/${id}/read`), onSuccess: refreshNotifications });
   const markAll = useMutation({ mutationFn: () => api.post('/notifications/read-all'), onSuccess: refreshNotifications });
 
   return (
@@ -38,16 +36,22 @@ export default function NotificationsScreen() {
         refreshControl={<RefreshControl refreshing={query.isFetching} onRefresh={query.refetch} colors={['#15803d']} />}
         renderItem={({ item }) => {
           const unread = !(item.isRead ?? item.read);
-          const id = getEntityId(item);
           return (
-            <TouchableOpacity style={[styles.card, unread && styles.unread]} activeOpacity={unread ? 0.7 : 1} onPress={() => unread && id && markRead.mutate(id)}>
+            <TouchableOpacity
+              style={[styles.card, unread && styles.unread]}
+              activeOpacity={0.75}
+              onPress={() => navigation.navigate('NotificationDetail', { notification: item })}
+            >
               <View style={styles.icon}><Feather name={unread ? 'bell' : 'check'} size={20} color={unread ? '#15803d' : '#94a3b8'} /></View>
               <View style={styles.content}>
-                <Text style={styles.title}>{item.title || 'Thông báo'}</Text>
-                <Text style={styles.message}>{item.message || item.content || ''}</Text>
-                <Text style={styles.date}>{dateLabel(item.createdAt || item.sentAt)}</Text>
+                <View style={styles.titleRow}>
+                  <Text style={styles.title}>{item.title || 'Thông báo'}</Text>
+                  {unread ? <View style={styles.newBadge}><Text style={styles.newBadgeText}>Mới</Text></View> : null}
+                </View>
+                <Text style={styles.message} numberOfLines={2}>{item.message || item.content || ''}</Text>
+                <Text style={styles.date}>{formatVietnamDateTime(item.createdAt || item.sentAt)}</Text>
               </View>
-              {unread ? <View style={styles.dot} /> : null}
+              <Feather name="chevron-right" size={19} color="#94a3b8" style={styles.chevron} />
             </TouchableOpacity>
           );
         }}
@@ -68,10 +72,13 @@ const styles = StyleSheet.create({
   unread: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' },
   icon: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginRight: 11 },
   content: { flex: 1 },
-  title: { color: '#0f172a', fontSize: 15, fontWeight: '800' },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 7 },
+  title: { flex: 1, color: '#0f172a', fontSize: 15, fontWeight: '800' },
+  newBadge: { backgroundColor: '#16a34a', borderRadius: 9, paddingHorizontal: 7, paddingVertical: 3 },
+  newBadgeText: { color: '#fff', fontSize: 9, fontWeight: '900' },
   message: { color: '#475569', lineHeight: 19, marginTop: 4 },
   date: { color: '#94a3b8', fontSize: 11, marginTop: 7 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#16a34a', marginLeft: 8, marginTop: 5 },
+  chevron: { marginLeft: 7, marginTop: 12 },
   error: { color: '#b91c1c', padding: 16, paddingBottom: 0 },
   empty: { alignItems: 'center', paddingTop: 64 },
   emptyText: { color: '#94a3b8', marginTop: 12, fontWeight: '600' },

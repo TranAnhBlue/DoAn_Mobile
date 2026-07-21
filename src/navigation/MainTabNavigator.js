@@ -1,20 +1,18 @@
 import { Feather } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useQuery } from '@tanstack/react-query';
 
 import NotificationsScreen from '../features/notifications/screens/NotificationsScreen';
 import MyTasksScreen from '../roles/farm-leader/screens/MyTasksScreen.js';
 import PlansAndLogsScreen from '../roles/farm-leader/screens/PlansAndLogsScreen.js';
 import LandPlotsScreen from '../features/land-plots/screens/LandPlotsScreen.js';
 import ProfileScreen from '../features/profile/screens/ProfileScreen';
-<<<<<<< Updated upstream
-=======
 import FarmersScreen from '../roles/farm-supervisor/screens/FarmersScreen.js';
 import SupervisorPlansScreen from '../roles/farm-supervisor/screens/SupervisorPlansScreen.js';
 import { useAuthStore } from '../features/auth/store/authStore';
 import { isFarmSupervisor } from '../features/auth/utils/roles';
 import api from '../shared/api/client';
 import { extractItems, unwrapPayload } from '../shared/api/response';
->>>>>>> Stashed changes
 
 const Tab = createBottomTabNavigator();
 
@@ -35,8 +33,6 @@ const SUPERVISOR_TABS = [
 ];
 
 export default function MainTabNavigator() {
-<<<<<<< Updated upstream
-=======
   const user = useAuthStore((state) => state.user);
   const userRole = user?.role || user?.roles?.[0];
   const supervisorMode = isFarmSupervisor(userRole);
@@ -56,8 +52,6 @@ export default function MainTabNavigator() {
     refetchInterval: 30000,
   });
   const unreadCount = Number.isFinite(unreadQuery.data) ? unreadQuery.data : 0;
-
->>>>>>> Stashed changes
   return (
     <Tab.Navigator
       initialRouteName={supervisorMode ? 'SupervisorPlans' : 'PlansAndLogs'}
@@ -84,7 +78,15 @@ export default function MainTabNavigator() {
           key={tab.name}
           name={tab.name}
           component={tab.component}
-          options={{ tabBarLabel: tab.label }}
+          options={{
+            tabBarLabel: tab.label,
+            tabBarBadge: tab.name === 'Notifications' && unreadCount > 0
+              ? (unreadCount > 99 ? '99+' : unreadCount)
+              : undefined,
+            tabBarBadgeStyle: tab.name === 'Notifications'
+              ? { backgroundColor: '#dc2626', color: '#fff', fontSize: 10, fontWeight: '900' }
+              : undefined,
+          }}
         />
       ))}
     </Tab.Navigator>
