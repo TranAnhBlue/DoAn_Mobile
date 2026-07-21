@@ -17,12 +17,13 @@ import {
   View,
 } from 'react-native';
 import api from '../../../shared/api/client';
+import { normalizeUser, unwrapApiData } from '../../auth/api/authApi';
 import { useAuthStore } from '../../auth/store/authStore';
 
 const GENDERS = ['Nam', 'Nữ', 'Khác'];
 
 export default function AccountInfoScreen({ navigation }) {
-  const { user, setUser } = useAuthStore();
+  const { user, setUser, refreshCurrentUser } = useAuthStore();
   const queryClient = useQueryClient();
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [tempDate, setTempDate] = useState(null);
@@ -38,59 +39,31 @@ export default function AccountInfoScreen({ navigation }) {
 
   const updateMutation = useMutation({
     mutationFn: (values) => {
-      const updateData = {
+      return api.put('/users/me/profile', {
         fullName: values.fullname?.trim() || '',
-      };
-      
-      // Only include fields that have valid values
-      if (values.phone?.trim()) {
-        updateData.phoneNumber = values.phone.trim();
-      }
-      
-      if (values.dateOfBirth) {
-        updateData.dateOfBirth = values.dateOfBirth;
-      }
-      
-      if (values.gender) {
-        updateData.gender = values.gender;
-      }
-      
-      if (values.address?.trim()) {
-        updateData.address = values.address.trim();
-      }
-      
-      console.log('Updating profile with data:', updateData);
-      return api.put('/users/me/profile', updateData);
+        phoneNumber: values.phone?.trim() || null,
+        dateOfBirth: values.dateOfBirth || null,
+        gender: values.gender || null,
+        address: values.address?.trim() || null,
+      });
     },
     onSuccess: async (res) => {
-      console.log('Update profile response:', res.data);
-      
-      // Backend returns data directly, not nested in data.data
-      const raw = res.data?.data || res.data;
-      
-      console.log('Parsed user data:', raw);
-      
-      if (raw && typeof raw === 'object') {
-        const updated = {
-          ...user,
-          fullname:    raw.fullName || raw.fullname || user.fullname,
-          phone:       raw.phoneNumber || raw.phone || user.phone,
-          dateOfBirth: raw.dateOfBirth || user.dateOfBirth,
-          gender:      raw.gender || user.gender,
-          address:     raw.address || user.address,
-          avatar:      raw.avatarUrl || raw.avatar || user.avatar,
-        };
-        console.log('Updated user object:', updated);
-        await setUser(updated);
+      try {
+        await refreshCurrentUser();
+      } catch {
+        const raw = unwrapApiData(res.data);
+        const containsUser = raw && typeof raw === 'object'
+          && ['id', 'userId', 'email', 'fullName', 'fullname'].some((key) => raw[key]);
+
+        if (containsUser) {
+          await setUser(normalizeUser({ ...user, ...raw }));
+        }
       }
+
       queryClient.invalidateQueries({ queryKey: ['users'] });
       Alert.alert('Thành công', 'Cập nhật hồ sơ thành công!');
     },
     onError: (err) => {
-      console.error('Update profile error:', err);
-      console.error('Error response:', err.response?.data);
-      
-      // Handle validation errors
       const errors = err.response?.data?.errors;
       const message = err.response?.data?.message;
       
@@ -178,13 +151,6 @@ export default function AccountInfoScreen({ navigation }) {
         type: asset.mimeType || `image/${fileExtension}`,
       });
 
-      console.log('Uploading avatar with data:', {
-        uri: asset.uri,
-        name: `avatar.${fileExtension}`,
-        type: asset.mimeType,
-      });
-
-      // Try with /api prefix if not already included
       const { data } = await api.post('/users/me/avatar', formData, {
         headers: { 
           'Content-Type': 'multipart/form-data',
@@ -195,20 +161,25 @@ export default function AccountInfoScreen({ navigation }) {
         },
       });
 
-      console.log('Upload response:', data);
-
-      if (data.success) {
-        const avatarUrl = data.data?.avatarUrl || data.data?.avatar || data.avatarUrl;
-        console.log('New avatar URL:', avatarUrl);
-        await setUser({ ...user, avatar: avatarUrl });
-        Alert.alert('Thành công', 'Ảnh đại diện đã được cập nhật!');
-      } else {
-        Alert.alert('Lỗi', data.message || 'Không thể tải ảnh đại diện lên.');
+      if (data?.success === false) {
+        throw new Error(data.message || 'Không thể tải ảnh đại diện lên.');
       }
+
+      const raw = unwrapApiData(data) || {};
+      const avatarUrl = raw.avatarUrl || raw.avatar;
+
+      if (avatarUrl) {
+        await setUser({ ...user, avatar: avatarUrl });
+      } else {
+        await refreshCurrentUser();
+      }
+
+      Alert.alert('Thành công', 'Ảnh đại diện đã được cập nhật!');
     } catch (error) {
-      console.error('Upload avatar error:', error);
-      console.error('Error response:', error.response?.data);
-      const errorMsg = error.response?.data?.message || error.response?.data?.error || 'Không thể tải ảnh đại diện lên.';
+      const errorMsg = error.response?.data?.message
+        || error.response?.data?.error
+        || error.message
+        || 'Không thể tải ảnh đại diện lên.';
       Alert.alert('Lỗi', errorMsg);
     } finally {
       setUploadingAvatar(false);

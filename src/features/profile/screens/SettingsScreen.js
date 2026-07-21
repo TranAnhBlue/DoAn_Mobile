@@ -26,13 +26,7 @@ export default function SettingsScreen({ navigation }) {
         {
           text: 'Đăng xuất',
           style: 'destructive',
-          onPress: () => {
-            logout();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Login' }],
-            });
-          },
+          onPress: logout,
         },
       ]
     );
