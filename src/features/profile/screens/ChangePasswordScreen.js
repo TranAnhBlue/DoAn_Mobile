@@ -11,9 +11,11 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useMutation } from '@tanstack/react-query';
-import api from '../../../shared/api/client';
+import authApi from '../../auth/api/authApi';
+import { useAuthStore } from '../../auth/store/authStore';
 
 export default function ChangePasswordScreen({ navigation }) {
+  const clearSession = useAuthStore((state) => state.clearSession);
   const [formData, setFormData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -28,20 +30,23 @@ export default function ChangePasswordScreen({ navigation }) {
       if (values.newPassword !== values.confirmPassword) {
         return Promise.reject(new Error('Mật khẩu xác nhận không khớp!'));
       }
-      return api.put('/users/profile', {
+      return authApi.changePassword({
         currentPassword: values.currentPassword,
-        password: values.newPassword,
+        newPassword: values.newPassword,
+        confirmNewPassword: values.confirmPassword,
       });
     },
-    onSuccess: () => {
-      Alert.alert('Thành công', 'Đổi mật khẩu thành công!', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+    onSuccess: async () => {
       setFormData({
         currentPassword: '',
         newPassword: '',
         confirmPassword: '',
       });
+      await clearSession();
+      Alert.alert(
+        'Thành công',
+        'Đổi mật khẩu thành công. Vui lòng đăng nhập lại trên các thiết bị.'
+      );
     },
     onError: (err) => {
       Alert.alert('Lỗi', err.response?.data?.message || err.message || 'Có lỗi xảy ra!');

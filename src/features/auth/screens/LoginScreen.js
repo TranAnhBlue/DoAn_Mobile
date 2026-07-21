@@ -11,16 +11,15 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import api from '../../../shared/api/client';
 import DismissKeyboard from '../../../shared/components/DismissKeyboard';
 import { useAuthStore } from '../store/authStore';
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen() {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const setCredentials = useAuthStore((state) => state.setCredentials);
+  const login = useAuthStore((state) => state.login);
 
   const handleLogin = async () => {
     if (!identifier || !password) {
@@ -30,43 +29,13 @@ export default function LoginScreen({ navigation }) {
 
     try {
       setLoading(true);
-      const { data } = await api.post('/auth/login', {
-        identifier,
-        password,
-      });
-
-      const raw = data.data;
-      const token = raw?.accessToken || raw?.token;
-
-      if (!token) {
-        Alert.alert('Lỗi', 'Không nhận được token từ server. Vui lòng thử lại.');
-        setLoading(false);
-        return;
-      }
-
-      // Normalize các field để khớp với toàn bộ app
-      // API trả về: fullName, roles[], avatarUrl, phoneNumber
-      // App dùng:   fullname, role,    avatar,    phone
-      const rawRole = Array.isArray(raw.roles) ? raw.roles[0] : (raw.role || '');
-      const roleMap = { FARMER: 'Farmer', ADMIN: 'Admin', HTX: 'HTX', USER: 'User' };
-      const userData = {
-        id:           raw.userId,
-        username:     raw.email,
-        fullname:     raw.fullName,
-        email:        raw.email,
-        phone:        raw.phoneNumber,
-        avatar:       raw.avatarUrl,
-        role:         roleMap[rawRole?.toUpperCase()] || rawRole,
-        roles:        raw.roles,
-        organization: raw.organization || null,
-        province:     raw.province || null,
-      };
-
-      await setCredentials(userData, token);
-      setLoading(false);
+      await login(identifier.trim(), password);
     } catch (error) {
-      const errorMsg = error.response?.data?.message || 'Đăng nhập thất bại. Vui lòng thử lại.';
+      const errorMsg = error.response?.data?.message
+        || error.message
+        || 'Đăng nhập thất bại. Vui lòng thử lại.';
       Alert.alert('Lỗi', errorMsg);
+    } finally {
       setLoading(false);
     }
   };
@@ -124,14 +93,6 @@ export default function LoginScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Forgot Password Link */}
-        <TouchableOpacity
-          onPress={() => navigation.navigate('ForgotPassword')}
-          style={styles.forgotPassword}
-        >
-          <Text style={styles.forgotPasswordText}>Quên mật khẩu?</Text>
-        </TouchableOpacity>
-
         {/* Login Button */}
         <TouchableOpacity 
           style={styles.button} 
@@ -144,14 +105,6 @@ export default function LoginScreen({ navigation }) {
             <Text style={styles.buttonText}>Đăng nhập</Text>
           )}
         </TouchableOpacity>
-
-        {/* Register Link */}
-        <View style={styles.registerContainer}>
-          <Text style={styles.registerText}>Chưa có tài khoản? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-            <Text style={styles.registerLink}>Đăng ký ngay</Text>
-          </TouchableOpacity>
-        </View>
         </View>
       </SafeAreaView>
     </DismissKeyboard>
