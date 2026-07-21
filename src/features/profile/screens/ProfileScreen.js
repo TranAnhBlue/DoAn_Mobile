@@ -9,6 +9,9 @@ const ROLE_LABELS = {
   FARMLEADER: 'Trưởng nhóm nông trại',
   FARM_LEADER: 'Trưởng nhóm nông trại',
   FarmLeader: 'Trưởng nhóm nông trại',
+  FARMSUPERVISOR: 'Giám sát nông trại',
+  FARM_SUPERVISOR: 'Giám sát nông trại',
+  FarmSupervisor: 'Giám sát nông trại',
 };
 
 const MENU_ITEMS = [
