@@ -1,14 +1,14 @@
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import api from '../../../shared/api/client';
 import { extractItems, getApiErrorMessage, getEntityId } from '../../../shared/api/response';
 
 const valueOf = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
 
-export default function LandPlotsScreen() {
+export default function LandPlotsScreen({ navigation }) {
   const [plots, setPlots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -47,7 +47,11 @@ export default function LandPlotsScreen() {
           const status = String(item.status || '').toUpperCase();
           const active = ['ACTIVE', 'AVAILABLE', 'IN_USE'].includes(status);
           return (
-            <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.75}
+              onPress={() => navigation.navigate('LandPlotDetail', { landPlotId: getEntityId(item), landPlot: item })}
+            >
               <View style={styles.titleRow}>
                 <View style={styles.icon}><Feather name="map-pin" size={20} color="#15803d" /></View>
                 <View style={styles.titleContent}>
@@ -55,13 +59,14 @@ export default function LandPlotsScreen() {
                   <Text style={styles.code}>{valueOf(item.code, item.landPlotCode, 'Chưa có mã')}</Text>
                 </View>
                 {status ? <View style={[styles.badge, active && styles.badgeActive]}><Text style={[styles.badgeText, active && styles.badgeTextActive]}>{active ? 'Hoạt động' : status}</Text></View> : null}
+                <Feather name="chevron-right" size={19} color="#94a3b8" style={styles.chevron} />
               </View>
               <View style={styles.details}>
                 <Text style={styles.detail}>Diện tích: <Text style={styles.detailValue}>{valueOf(item.area, item.totalArea, item.actualArea, '--')} ha</Text></Text>
                 <Text style={styles.detail}>Loại đất: <Text style={styles.detailValue}>{valueOf(item.soilTypeName, item.soilType?.name, '--')}</Text></Text>
                 <Text style={styles.detail}>Địa chỉ: <Text style={styles.detailValue}>{valueOf(item.address, item.location, '--')}</Text></Text>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         }}
         ListEmptyComponent={<View style={styles.empty}><Feather name="map" size={48} color="#cbd5e1" /><Text style={styles.emptyText}>Chưa có vùng trồng</Text></View>}
@@ -87,6 +92,7 @@ const styles = StyleSheet.create({
   badgeActive: { backgroundColor: '#dcfce7' },
   badgeText: { color: '#64748b', fontSize: 10, fontWeight: '900' },
   badgeTextActive: { color: '#15803d' },
+  chevron: { marginLeft: 7 },
   details: { borderTopWidth: 1, borderTopColor: '#f1f5f9', marginTop: 14, paddingTop: 10, gap: 6 },
   detail: { color: '#64748b', fontSize: 13 },
   detailValue: { color: '#334155', fontWeight: '700' },
