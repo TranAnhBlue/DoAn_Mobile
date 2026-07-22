@@ -9,7 +9,7 @@ import ProfileScreen from "../features/profile/screens/ProfileScreen";
 
 const Tab = createBottomTabNavigator();
 
-const LEADER_TABS = [
+const TABS = [
   {
     name: "PlansAndLogs",
     label: "Kế hoạch\n& Ghi chép",

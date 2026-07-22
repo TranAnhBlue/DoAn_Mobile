@@ -16,7 +16,7 @@ import {
 
 import api from '../../../shared/api/client';
 import { extractItems, getApiErrorMessage, getEntityId } from '../../../shared/api/response';
-import DailyLogModal from '../components/DailyLogModal';
+import DailyLogModal from '../../../roles/farm-leader/components/DailyLogModal';
 
 const STATUS = {
   PENDING: ['Chờ thực hiện', '#64748b'],

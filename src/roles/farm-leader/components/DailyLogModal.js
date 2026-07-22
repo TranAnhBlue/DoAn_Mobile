@@ -1,6 +1,5 @@
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -23,23 +22,37 @@ import {
 import api from '../../../shared/api/client';
 import { extractItems, getApiErrorMessage, getEntityId, unwrapPayload } from '../../../shared/api/response';
 import { formatVietnamDateTime } from '../../../features/notifications/utils/dateTime';
+import { useNetworkStatus } from '../../../shared/hooks/useNetworkStatus';
+import { offlineQueue } from '../../../shared/services/offlineQueue';
+import FieldCameraScreen from './FieldCameraScreen';
+
+const CATALOG_CACHE_KEY = {
+  fertilizer: 'farm-leader:catalog-cache:fertilizer',
+  pesticide: 'farm-leader:catalog-cache:pesticide',
+};
 
 const valueOf = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
 
 const catalogName = (item) => valueOf(item.name, item.fertilizerName, item.pesticideName, item.tradeName, item.code, 'Vật tư');
 
 export default function DailyLogModal({ visible, task, onClose, onSaved }) {
+  const { isConnected } = useNetworkStatus();
+  const isOffline = isConnected === false;
+
   const [description, setDescription] = useState('');
   const [fertilizers, setFertilizers] = useState([]);
   const [pesticides, setPesticides] = useState([]);
   const [images, setImages] = useState([]);
   const [catalogs, setCatalogs] = useState({ fertilizer: [], pesticide: [] });
+  const [catalogFromCache, setCatalogFromCache] = useState(false);
   const [catalogErrors, setCatalogErrors] = useState({});
   const [history, setHistory] = useState([]);
   const [loadingCatalogs, setLoadingCatalogs] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [pickerType, setPickerType] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const taskId = getEntityId(task);
   const draftKey = taskId ? `farm-leader:daily-log-draft:${taskId}` : null;
 
@@ -71,6 +84,32 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
       });
     }
 
+    // Đọc pending offline count
+    offlineQueue.count().then(setPendingCount);
+
+    if (isOffline) {
+      // Khi offline: dùng cache catalog đã lưu trước
+      Promise.allSettled([
+        AsyncStorage.getItem(CATALOG_CACHE_KEY.fertilizer),
+        AsyncStorage.getItem(CATALOG_CACHE_KEY.pesticide),
+      ]).then(([fertRes, pestRes]) => {
+        const nextCatalogs = { fertilizer: [], pesticide: [] };
+        let usedCache = false;
+        if (fertRes.status === 'fulfilled' && fertRes.value) {
+          try { nextCatalogs.fertilizer = JSON.parse(fertRes.value); usedCache = true; } catch {}
+        }
+        if (pestRes.status === 'fulfilled' && pestRes.value) {
+          try { nextCatalogs.pesticide = JSON.parse(pestRes.value); usedCache = true; } catch {}
+        }
+        setCatalogs(nextCatalogs);
+        setCatalogFromCache(usedCache);
+      }).finally(() => {
+        setLoadingCatalogs(false);
+        setLoadingHistory(false);
+      });
+      return;
+    }
+
     Promise.allSettled([
       api.get('/catalogs/fertilizers'),
       api.get('/catalogs/pesticides'),
@@ -81,6 +120,8 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
 
       if (fertilizerResult.status === 'fulfilled') {
         nextCatalogs.fertilizer = extractItems(fertilizerResult.value.data);
+        // Lưu cache để dùng khi offline
+        AsyncStorage.setItem(CATALOG_CACHE_KEY.fertilizer, JSON.stringify(nextCatalogs.fertilizer)).catch(() => {});
       } else {
         nextErrors.fertilizer = fertilizerResult.reason?.response?.status === 403
           ? 'Tài khoản chưa được cấp quyền xem danh mục phân bón.'
@@ -89,18 +130,21 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
 
       if (pesticideResult.status === 'fulfilled') {
         nextCatalogs.pesticide = extractItems(pesticideResult.value.data);
+        // Lưu cache để dùng khi offline
+        AsyncStorage.setItem(CATALOG_CACHE_KEY.pesticide, JSON.stringify(nextCatalogs.pesticide)).catch(() => {});
       } else {
         nextErrors.pesticide = getApiErrorMessage(pesticideResult.reason, 'Không thể tải danh mục thuốc BVTV.');
       }
 
       setCatalogs(nextCatalogs);
       setCatalogErrors(nextErrors);
+      setCatalogFromCache(false);
       if (historyResult.status === 'fulfilled') setHistory(extractItems(historyResult.value.data));
     }).finally(() => {
       setLoadingCatalogs(false);
       setLoadingHistory(false);
     });
-  }, [draftKey, taskId, visible]);
+  }, [draftKey, isOffline, taskId, visible]);
 
   const hasDraft = Boolean(description.trim() || fertilizers.length || pesticides.length || images.length);
 
@@ -164,23 +208,17 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
     setter((current) => current.filter((item) => item.id !== id));
   };
 
-  const pickImages = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Cần quyền truy cập', 'Cho phép truy cập thư viện ảnh để thêm ảnh minh chứng.');
+  const openCamera = () => {
+    if (images.length >= 3) {
+      Alert.alert('Đã đủ ảnh', 'Tối đa 3 ảnh minh chứng mỗi ghi chép.');
       return;
     }
+    setCameraOpen(true);
+  };
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      selectionLimit: Math.max(1, 5 - images.length),
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setImages((current) => [...current, ...result.assets].slice(0, 5));
-    }
+  const handleCaptured = (asset) => {
+    setCameraOpen(false);
+    setImages((current) => [...current, asset].slice(0, 3));
   };
 
   const uploadImage = async (asset, index) => {
@@ -198,7 +236,11 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
     const payload = unwrapPayload(response.data) || {};
     const url = valueOf(payload.url, payload.secureUrl, payload.fileUrl, payload.path);
     if (!url) throw new Error('API tải ảnh không trả về URL.');
-    return { id: valueOf(payload.id, payload.publicId, ''), url };
+    return {
+      id: valueOf(payload.id, payload.publicId, ''),
+      url,
+      metadata: asset.metadata ?? null, // GPS + timestamp từ FieldCameraScreen
+    };
   };
 
   const toRequestMaterials = (items) => items.map((item) => ({
@@ -216,12 +258,34 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
 
     const invalidMaterial = [...fertilizers, ...pesticides].find((item) => !item.id || !item.quantity || Number(item.quantity) <= 0);
     if (invalidMaterial) {
-      Alert.alert('Vật tư chưa hợp lệ', `Nhập số lượng lớn hơn 0 cho “${invalidMaterial.name}”.`);
+      Alert.alert('Vật tư chưa hợp lệ', `Nhập số lượng lớn hơn 0 cho "${invalidMaterial.name}".`);
       return;
     }
 
     setSaving(true);
     try {
+      // === OFFLINE: lưu vào queue, tự sync khi có mạng ===
+      if (isOffline) {
+        await offlineQueue.enqueue({
+          taskId,
+          date: new Date().toISOString(),
+          description: description.trim(),
+          fertilizers,
+          pesticides,
+          imageAssets: images, // Lưu nguyên asset (có uri) để upload sau
+        });
+        if (draftKey) await AsyncStorage.removeItem(draftKey);
+        resetAndClose();
+        Alert.alert(
+          'Đã lưu offline ✓',
+          'Ghi chép được lưu trên thiết bị và sẽ tự động gửi lên server khi có kết nối mạng.',
+          [{ text: 'OK' }]
+        );
+        onSaved?.();
+        return;
+      }
+
+      // === ONLINE: gửi ngay ===
       const uploadedImages = await Promise.all(images.map(uploadImage));
       await api.post('/cultivation-daily-logs', {
         taskId,
@@ -297,7 +361,29 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
           </TouchableOpacity>
         </View>
 
+        {/* Banner offline */}
+        {isOffline ? (
+          <View style={styles.offlineBanner}>
+            <Feather name="wifi-off" size={14} color="#92400e" />
+            <Text style={styles.offlineBannerText}>
+              Không có mạng — ghi chép sẽ được lưu offline{pendingCount > 0 ? ` (${pendingCount} đang chờ gửi)` : ''}
+            </Text>
+          </View>
+        ) : pendingCount > 0 ? (
+          <View style={styles.syncBanner}>
+            <Feather name="upload-cloud" size={14} color="#1d4ed8" />
+            <Text style={styles.syncBannerText}>{pendingCount} ghi chép đang chờ đồng bộ</Text>
+          </View>
+        ) : null}
+
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          {/* Badge bộ nhớ đệm */}
+          {catalogFromCache ? (
+            <View style={styles.cacheBanner}>
+              <Feather name="database" size={13} color="#6d28d9" />
+              <Text style={styles.cacheBannerText}>Danh mục vật tư từ bộ nhớ đệm (offline)</Text>
+            </View>
+          ) : null}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Nội dung thực hiện</Text>
             {task?.description ? <Text style={styles.taskDescription}>{task.description}</Text> : null}
@@ -331,18 +417,48 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Ảnh minh chứng</Text>
-            <TouchableOpacity style={styles.imagePicker} onPress={pickImages} disabled={images.length >= 5}>
-              <Feather name="image" size={25} color="#16a34a" />
-              <Text style={styles.imagePickerText}>Chọn ảnh từ thiết bị</Text>
-              <Text style={styles.imageHint}>Tối đa 5 ảnh</Text>
+            <View style={styles.imageHeader}>
+              <Text style={styles.sectionTitle}>Ảnh minh chứng</Text>
+              <View style={styles.imageBadge}>
+                <Feather name="map-pin" size={11} color="#15803d" />
+                <Text style={styles.imageBadgeText}>GPS + thời gian</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.imagePicker, images.length >= 3 && styles.imagePickerDisabled]}
+              onPress={openCamera}
+              disabled={images.length >= 3}
+            >
+              <Feather name="camera" size={25} color={images.length >= 3 ? '#94a3b8' : '#16a34a'} />
+              <Text style={[styles.imagePickerText, images.length >= 3 && { color: '#94a3b8' }]}>
+                {images.length >= 3 ? 'Đã đủ 3 ảnh' : 'Chụp ảnh hiện trường'}
+              </Text>
+              <Text style={styles.imageHint}>{images.length}/3 ảnh • có GPS & thời gian</Text>
             </TouchableOpacity>
             {images.length ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.previewRow}>
                 {images.map((image, index) => (
                   <View key={`${image.uri}-${index}`} style={styles.previewWrap}>
                     <Image source={{ uri: image.uri }} style={styles.preview} />
-                    <TouchableOpacity style={styles.removeImage} onPress={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
+                    {/* GPS badge */}
+                    {image.metadata?.lat != null ? (
+                      <View style={styles.gpsBadge}>
+                        <Feather name="map-pin" size={9} color="#fff" />
+                        <Text style={styles.gpsBadgeText}>GPS</Text>
+                      </View>
+                    ) : null}
+                    {/* Giờ chụp */}
+                    {image.metadata?.capturedAt ? (
+                      <View style={styles.timeBadge}>
+                        <Text style={styles.timeBadgeText}>
+                          {new Date(image.metadata.capturedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <TouchableOpacity
+                      style={styles.removeImage}
+                      onPress={() => setImages((current) => current.filter((_, i) => i !== index))}
+                    >
                       <Feather name="x" size={14} color="#fff" />
                     </TouchableOpacity>
                   </View>
@@ -372,8 +488,19 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
           <TouchableOpacity style={[styles.footerButton, styles.draftButton]} onPress={saveDraft} disabled={saving}>
             <Text style={styles.draftText}>Lưu nháp</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.footerButton, styles.submitButton]} onPress={submit} disabled={saving}>
-            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Lưu & Gửi</Text>}
+          <TouchableOpacity
+            style={[styles.footerButton, isOffline ? styles.offlineButton : styles.submitButton]}
+            onPress={submit}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <View style={styles.submitInner}>
+                {isOffline && <Feather name="wifi-off" size={14} color="#fff" style={{ marginRight: 6 }} />}
+                <Text style={styles.submitText}>{isOffline ? 'Lưu offline' : 'Lưu & Gửi'}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -401,6 +528,12 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
             </View>
           </View>
         ) : null}
+
+        <FieldCameraScreen
+          visible={cameraOpen}
+          onCapture={handleCaptured}
+          onClose={() => setCameraOpen(false)}
+        />
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -430,18 +563,34 @@ const styles = StyleSheet.create({
   materialInputs: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   smallInput: { flex: 1, minHeight: 44, borderWidth: 1, borderColor: '#94a3b8', borderRadius: 9, paddingHorizontal: 10, color: '#0f172a', backgroundColor: '#fff' },
   imagePicker: { height: 112, borderWidth: 1, borderStyle: 'dashed', borderColor: '#22c55e', borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fffa' },
+  imagePickerDisabled: { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
   imagePickerText: { color: '#15803d', fontWeight: '800', marginTop: 7 },
   imageHint: { color: '#64748b', fontSize: 12, marginTop: 3 },
+  imageHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 },
+  imageBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#dcfce7', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  imageBadgeText: { color: '#15803d', fontSize: 10, fontWeight: '800' },
   previewRow: { marginTop: 12 },
-  previewWrap: { width: 82, height: 82, marginRight: 10 },
-  preview: { width: 82, height: 82, borderRadius: 10 },
+  previewWrap: { width: 90, height: 90, marginRight: 10 },
+  preview: { width: 90, height: 90, borderRadius: 10 },
+  gpsBadge: { position: 'absolute', top: 5, left: 5, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#16a34a', borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2 },
+  gpsBadgeText: { color: '#fff', fontSize: 8, fontWeight: '900' },
+  timeBadge: { position: 'absolute', bottom: 5, left: 4, backgroundColor: 'rgba(0,0,0,0.62)', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
+  timeBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
   removeImage: { position: 'absolute', top: -5, right: -5, width: 23, height: 23, borderRadius: 12, backgroundColor: '#dc2626', alignItems: 'center', justifyContent: 'center' },
   footer: { flexDirection: 'row', gap: 10, paddingHorizontal: 14, paddingTop: 11, paddingBottom: Platform.OS === 'ios' ? 30 : 14, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e2e8f0' },
   footerButton: { flex: 1, minHeight: 48, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   draftButton: { borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#fff' },
   submitButton: { backgroundColor: '#16a34a' },
+  offlineButton: { backgroundColor: '#b45309' },
+  submitInner: { flexDirection: 'row', alignItems: 'center' },
   draftText: { color: '#334155', fontWeight: '800' },
   submitText: { color: '#fff', fontWeight: '900' },
+  offlineBanner: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#fef3c7', borderBottomWidth: 1, borderBottomColor: '#fcd34d', paddingHorizontal: 14, paddingVertical: 9 },
+  offlineBannerText: { flex: 1, color: '#92400e', fontSize: 12, fontWeight: '700' },
+  syncBanner: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#dbeafe', borderBottomWidth: 1, borderBottomColor: '#93c5fd', paddingHorizontal: 14, paddingVertical: 9 },
+  syncBannerText: { flex: 1, color: '#1d4ed8', fontSize: 12, fontWeight: '700' },
+  cacheBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#ede9fe', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, marginBottom: 10 },
+  cacheBannerText: { color: '#6d28d9', fontSize: 11, fontWeight: '700' },
   historyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   historyTitle: { marginBottom: 0 },
   historyBadge: { backgroundColor: '#dbeafe', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4 },
@@ -465,3 +614,4 @@ const styles = StyleSheet.create({
   catalogName: { color: '#1e293b', fontWeight: '800' },
   catalogUnit: { color: '#64748b', fontSize: 12, marginTop: 2 },
 });
+
