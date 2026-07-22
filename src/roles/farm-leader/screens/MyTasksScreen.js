@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,7 +16,7 @@ import {
 
 import api from '../../../shared/api/client';
 import { extractItems, getApiErrorMessage, getEntityId } from '../../../shared/api/response';
-import DailyLogModal from '../../../roles/farm-leader/components/DailyLogModal';
+import DailyLogModal from '../components/DailyLogModal';
 
 const STATUS = {
   PENDING: ['Chờ thực hiện', '#64748b'],
@@ -29,51 +29,64 @@ const STATUS = {
 const valueOf = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
 const dateOf = (value) => value ? new Date(value).toLocaleDateString('vi-VN') : 'Chưa xác định';
 
-export default function MyTasksScreen({ navigation, route }) {
+export default function MyTasksScreen() {
   const [tasks, setTasks] = useState([]);
   const [filter, setFilter] = useState('ALL');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [selectedTask, setSelectedTask] = useState(null);
+  const [dailyLogVisible, setDailyLogVisible] = useState(false);
   const [entryMode, setEntryMode] = useState('daily');
   const [description, setDescription] = useState('');
+  const [progress, setProgress] = useState('');
   const [saving, setSaving] = useState(false);
 
   const fetchTasks = useCallback(async () => {
     setError('');
     try {
-      const response = await api.get('/cultivation-tasks', { params: { PageIndex: 1, PageSize: 100 } });
+      let response;
+      try {
+        response = await api.get('/cultivation-tasks/my-tasks');
+      } catch (err) {
+        if (err?.response?.status === 404) {
+          response = await api.get('/cultivation-tasks', { params: { PageIndex: 1, PageSize: 100 } });
+        } else {
+          throw err;
+        }
+      }
       setTasks(extractItems(response.data));
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError, 'Không thể tải công việc.'));
+      setError(getApiErrorMessage(requestError, 'Không thể tải danh sách công việc.'));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { fetchTasks(); }, [fetchTasks]));
+  useFocusEffect(
+    useCallback(() => {
+      fetchTasks();
+    }, [fetchTasks])
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchTasks();
+  };
 
   const openEntry = (task, mode) => {
     setSelectedTask(task);
     setEntryMode(mode);
-    setDescription('');
+    if (mode === 'daily') {
+      setDailyLogVisible(true);
+    } else {
+      setDescription('');
+      setProgress('');
+    }
   };
 
-  useEffect(() => {
-    const focusTaskId = route.params?.focusTaskId;
-    if (!focusTaskId || !tasks.length) return;
-    const focusedTask = tasks.find((task) => getEntityId(task) === focusTaskId);
-    if (!focusedTask) return;
-
-    const status = String(focusedTask.status || '').toUpperCase();
-    if (['ACTIVE', 'IN_PROGRESS'].includes(status)) openEntry(focusedTask, 'daily');
-    else if (status === 'COMPLETED') openEntry(focusedTask, 'summary');
-    navigation.setParams({ focusTaskId: undefined });
-  }, [navigation, route.params?.focusTaskId, tasks]);
-
-  const submitEntry = async () => {
+  const submitSummaryEntry = async () => {
     if (!description.trim()) {
       Alert.alert('Thiếu thông tin', 'Nhập nội dung tổng hợp công việc.');
       return;
@@ -139,8 +152,8 @@ export default function MyTasksScreen({ navigation, route }) {
       <FlatList
         data={filteredTasks}
         keyExtractor={(item, index) => String(getEntityId(item) || index)}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#15803d']} />}
         contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchTasks(); }} colors={['#15803d']} />}
         renderItem={({ item }) => {
           const state = String(item.status || '').toUpperCase();
           const [label, color] = STATUS[state] || [item.status || 'Không rõ', '#64748b'];
@@ -169,9 +182,9 @@ export default function MyTasksScreen({ navigation, route }) {
       />
 
       <DailyLogModal
-        visible={Boolean(selectedTask) && entryMode === 'daily'}
+        visible={dailyLogVisible}
         task={selectedTask}
-        onClose={() => setSelectedTask(null)}
+        onClose={() => setDailyLogVisible(false)}
         onSaved={fetchTasks}
       />
 
@@ -183,7 +196,7 @@ export default function MyTasksScreen({ navigation, route }) {
             <TextInput style={[styles.input, styles.textarea]} placeholder="Nội dung tổng hợp sau khi hoàn thành" multiline value={description} onChangeText={setDescription} />
             <View style={styles.modalActions}>
               <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setSelectedTask(null)} disabled={saving}><Text style={styles.cancelText}>Hủy</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={submitEntry} disabled={saving}>{saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Gửi tổng hợp</Text>}</TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={submitSummaryEntry} disabled={saving}>{saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Gửi tổng hợp</Text>}</TouchableOpacity>
             </View>
           </View>
         </View>
