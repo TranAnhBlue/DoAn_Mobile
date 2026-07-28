@@ -32,6 +32,9 @@ const CATALOG_CACHE_KEY = {
   pesticide: 'farm-leader:catalog-cache:pesticide',
 };
 
+const FERTILIZER_UNITS = ['kg', 'g', 'tấn', 'lít', 'ml', 'bao', 'can', 'gói'];
+const PESTICIDE_UNITS = ['ml', 'lít', 'g', 'kg', 'chai', 'gói', 'can', 'bình'];
+
 const valueOf = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
 
 const catalogName = (item) => valueOf(item.name, item.fertilizerName, item.pesticideName, item.tradeName, item.code, 'Vật tư');
@@ -52,6 +55,7 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
   const [loadingCatalogs, setLoadingCatalogs] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [pickerType, setPickerType] = useState(null);
+  const [unitPickerTarget, setUnitPickerTarget] = useState(null); // { type, id, currentUnit }
   const [saving, setSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -121,7 +125,6 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
           const res = await api.get(endpoint);
           const rawItems = extractItems(res.data) || (Array.isArray(res.data) ? res.data : []);
           if (rawItems && rawItems.length) {
-            // Lọc đúng taskId nếu API trả về danh sách tổng
             const filtered = rawItems.filter((item) => {
               const itemTaskId = getEntityId(item.taskId) || item.taskId || item.cultivationTaskId;
               return !itemTaskId || String(itemTaskId) === String(taskId);
@@ -136,7 +139,6 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
         }
       }
 
-      // Hợp nhất server items và localSent (ưu tiên server, không trùng lặp)
       const serverIds = new Set(serverItems.map((s) => getEntityId(s) || s.id));
       const uniqueLocal = localSent.filter((l) => !serverIds.has(l.id));
       const combined = [...serverItems, ...uniqueLocal];
@@ -205,6 +207,7 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
     setPesticides([]);
     setImages([]);
     setPickerType(null);
+    setUnitPickerTarget(null);
     setCatalogErrors({});
     setHistory([]);
     setLoadingCatalogs(true);
@@ -309,6 +312,7 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
   const resetAndClose = () => {
     Keyboard.dismiss();
     setPickerType(null);
+    setUnitPickerTarget(null);
     onClose();
   };
 
@@ -342,6 +346,8 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
 
   const addMaterial = (item) => {
     const id = getEntityId(item);
+    const defaultUnit = pickerType === 'fertilizer' ? 'kg' : 'ml';
+    const initialUnit = valueOf(item.unit, item.defaultUnit, defaultUnit);
     const setter = pickerType === 'fertilizer' ? setFertilizers : setPesticides;
     setter((current) => {
       if (current.some((entry) => entry.id === id)) return current;
@@ -349,7 +355,7 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
         id,
         name: catalogName(item),
         quantity: '',
-        unit: valueOf(item.unit, item.defaultUnit, ''),
+        unit: initialUnit,
         area: '',
       }];
     });
@@ -401,10 +407,10 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
     };
   };
 
-  const toRequestMaterials = (items) => items.map((item) => ({
+  const toRequestMaterials = (items, type) => items.map((item) => ({
     id: item.id,
     quantity: Number(item.quantity),
-    unit: item.unit?.trim() || null,
+    unit: item.unit?.trim() || (type === 'fertilizer' ? 'kg' : 'ml'),
     area: item.area ? Number(item.area) : null,
   }));
 
@@ -432,8 +438,8 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
           landPlotId: task?.landPlotId || task?.plotId || undefined,
           date: new Date().toISOString(),
           description: description.trim(),
-          fertilizers,
-          pesticides,
+          fertilizers: fertilizers.map((f) => ({ ...f, unit: f.unit || 'kg' })),
+          pesticides: pesticides.map((p) => ({ ...p, unit: p.unit || 'ml' })),
           imageAssets: images,
         };
 
@@ -464,8 +470,8 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
         console.warn('[DailyLogModal] Upload ảnh thất bại, tiếp tục gửi log không ảnh:', imgError?.message);
       }
 
-      const reqFertilizers = toRequestMaterials(fertilizers);
-      const reqPesticides = toRequestMaterials(pesticides);
+      const reqFertilizers = toRequestMaterials(fertilizers, 'fertilizer');
+      const reqPesticides = toRequestMaterials(pesticides, 'pesticide');
 
       const logPayload = {
         taskId,
@@ -521,7 +527,6 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
 
       if (draftKey) await AsyncStorage.removeItem(draftKey);
 
-      // Lưu bản ghi vào bộ nhớ lịch sử cục bộ để hiển thị tức thì
       const sentItem = {
         id: `sent-${Date.now()}`,
         date: logPayload.date,
@@ -553,28 +558,40 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
       </View>
       <View style={styles.materialInputs}>
         <TextInput
-          style={styles.smallInput}
+          style={[styles.smallInput, { flex: 1.1 }]}
           value={item.quantity}
           onChangeText={(value) => updateMaterial(type, item.id, 'quantity', value)}
           placeholder="Số lượng *"
-          placeholderTextColor="#64748b"
+          placeholderTextColor="#94a3b8"
           keyboardType="decimal-pad"
         />
-        <TextInput
-          style={styles.smallInput}
-          value={item.unit}
-          onChangeText={(value) => updateMaterial(type, item.id, 'unit', value)}
-          placeholder="Đơn vị"
-          placeholderTextColor="#64748b"
-        />
-        <TextInput
-          style={styles.smallInput}
-          value={item.area}
-          onChangeText={(value) => updateMaterial(type, item.id, 'area', value)}
-          placeholder="Diện tích"
-          placeholderTextColor="#64748b"
-          keyboardType="decimal-pad"
-        />
+
+        {/* Dropdown Đơn vị */}
+        <TouchableOpacity
+          style={styles.unitDropdownButton}
+          onPress={() => setUnitPickerTarget({ type, id: item.id, currentUnit: item.unit || (type === 'fertilizer' ? 'kg' : 'ml') })}
+        >
+          <Text style={styles.unitDropdownText} numberOfLines={1}>
+            {item.unit || (type === 'fertilizer' ? 'kg' : 'ml')}
+          </Text>
+          <Feather name="chevron-down" size={14} color="#64748b" />
+        </TouchableOpacity>
+
+        {/* Ô nhập Diện tích + nhãn ha (disable) */}
+        <View style={styles.areaContainer}>
+          <TextInput
+            style={[styles.smallInput, { flex: 1 }]}
+            value={item.area}
+            onChangeText={(value) => updateMaterial(type, item.id, 'area', value)}
+            placeholder="Diện tích"
+            placeholderTextColor="#94a3b8"
+            keyboardType="decimal-pad"
+          />
+          <View style={styles.disabledUnitBadge}>
+            <Text style={styles.disabledUnitText}>ha</Text>
+            <Feather name="chevron-down" size={12} color="#94a3b8" />
+          </View>
+        </View>
       </View>
     </View>
   ));
@@ -864,6 +881,7 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
           </TouchableOpacity>
         </View>
 
+        {/* POPUP CHON VAT TU (CATALOG) */}
         {pickerType ? (
           <View style={styles.pickerOverlay}>
             <Pressable style={StyleSheet.absoluteFill} onPress={() => setPickerType(null)} />
@@ -894,6 +912,43 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
                   </TouchableOpacity>
                 )}
               />
+            </View>
+          </View>
+        ) : null}
+
+        {/* POPUP CHON DON VI (UNIT DROPDOWN) */}
+        {unitPickerTarget ? (
+          <View style={styles.pickerOverlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setUnitPickerTarget(null)} />
+            <View style={styles.unitPickerSheet}>
+              <View style={styles.pickerHeader}>
+                <Text style={styles.pickerTitle}>
+                  Chọn đơn vị tính ({unitPickerTarget.type === 'fertilizer' ? 'Phân bón' : 'Thuốc BVTV'})
+                </Text>
+                <TouchableOpacity onPress={() => setUnitPickerTarget(null)}>
+                  <Feather name="x" size={22} color="#475569" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ maxHeight: 340 }}>
+                {(unitPickerTarget.type === 'fertilizer' ? FERTILIZER_UNITS : PESTICIDE_UNITS).map((unitOption) => {
+                  const isSelected = unitPickerTarget.currentUnit === unitOption;
+                  return (
+                    <TouchableOpacity
+                      key={unitOption}
+                      style={[styles.unitOptionItem, isSelected && styles.unitOptionSelected]}
+                      onPress={() => {
+                        updateMaterial(unitPickerTarget.type, unitPickerTarget.id, 'unit', unitOption);
+                        setUnitPickerTarget(null);
+                      }}
+                    >
+                      <Text style={[styles.unitOptionText, isSelected && styles.unitOptionTextSelected]}>
+                        {unitOption}
+                      </Text>
+                      {isSelected ? <Feather name="check" size={16} color="#16a34a" /> : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
           </View>
         ) : null}
@@ -975,8 +1030,54 @@ const styles = StyleSheet.create({
   materialCard: { borderWidth: 1, borderColor: '#dbe4df', borderRadius: 11, padding: 11, marginBottom: 10, backgroundColor: '#f8fafc' },
   materialHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 },
   materialName: { flex: 1, color: '#1e293b', fontWeight: '800', marginRight: 10 },
-  materialInputs: { flexDirection: 'row', gap: 8 },
+  materialInputs: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   smallInput: { flex: 1, minHeight: 44, borderWidth: 1, borderColor: '#94a3b8', borderRadius: 9, paddingHorizontal: 10, color: '#0f172a', backgroundColor: '#fff' },
+  unitDropdownButton: {
+    height: 44,
+    flex: 0.9,
+    borderWidth: 1,
+    borderColor: '#22c55e',
+    borderRadius: 10,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+  },
+  unitDropdownText: { color: '#0f172a', fontSize: 13, fontWeight: '700' },
+  areaContainer: { flex: 1.5, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  disabledUnitBadge: {
+    height: 44,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  disabledUnitText: { color: '#64748b', fontSize: 13, fontWeight: '600' },
+  unitPickerSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '65%',
+    padding: 16,
+    width: '100%',
+  },
+  unitOptionItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  unitOptionSelected: { backgroundColor: '#f0fdf4' },
+  unitOptionText: { fontSize: 14, color: '#334155', fontWeight: '500' },
+  unitOptionTextSelected: { color: '#15803d', fontWeight: '800' },
   imagePicker: { height: 112, borderWidth: 1, borderStyle: 'dashed', borderColor: '#22c55e', borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fffa' },
   imagePickerDisabled: { borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
   imagePickerText: { color: '#15803d', fontWeight: '800', marginTop: 7 },
