@@ -44,67 +44,72 @@ export default function LoginScreen() {
     <DismissKeyboard>
       <SafeAreaView style={styles.container}>
         <View style={styles.formContainer}>
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image 
-            source={require('../../../../assets/images/Logo_EBookFarm.jpg')} 
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
-        </View>
-
-        <Text style={styles.title}>EBookFarm</Text>
-        <Text style={styles.subtitle}>Quản lý nhật ký sản xuất</Text>
-
-        {/* Email/Phone Input */}
-        <View style={styles.inputContainer}>
-          <Feather name="user" size={20} color="#9ca3af" style={styles.inputIcon} />
-          <TextInput
-            style={styles.input}
-            placeholder="Nhập email hoặc tên đăng nhập"
-            placeholderTextColor="#9ca3af"
-            value={identifier}
-            onChangeText={setIdentifier}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-        </View>
-
-        {/* Password Input */}
-        <View style={styles.inputContainer}>
-          <Feather name="lock" size={20} color="#9ca3af" style={styles.inputIcon} />
-          <TextInput
-            style={styles.input}
-            placeholder="Nhập mật khẩu của bạn"
-            placeholderTextColor="#9ca3af"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry={!showPassword}
-          />
-          <TouchableOpacity
-            onPress={() => setShowPassword(!showPassword)}
-            style={styles.eyeIcon}
-          >
-            <Feather
-              name={showPassword ? 'eye' : 'eye-off'}
-              size={20}
-              color="#9ca3af"
+          {/* Logo */}
+          <View style={styles.logoContainer}>
+            <Image 
+              source={require('../../../../assets/images/logo.png')} 
+              style={styles.logoImage}
+              resizeMode="contain"
             />
-          </TouchableOpacity>
-        </View>
+          </View>
 
-        {/* Login Button */}
-        <TouchableOpacity 
-          style={styles.button} 
-          onPress={handleLogin} 
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Đăng nhập</Text>
-          )}
-        </TouchableOpacity>
+          <Text style={styles.title}>EAPLS</Text>
+          <Text style={styles.subtitle}>Nhật ký sản xuất điện tử</Text>
+
+          {/* Email/Phone Input */}
+          <View style={styles.inputContainer}>
+            <Feather name="user" size={20} color="#9ca3af" style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Nhập email hoặc tên đăng nhập"
+              placeholderTextColor="#9ca3af"
+              value={identifier}
+              onChangeText={setIdentifier}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+          </View>
+
+          {/* Password Input */}
+          <View style={styles.inputContainer}>
+            <Feather name="lock" size={20} color="#9ca3af" style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Nhập mật khẩu của bạn"
+              placeholderTextColor="#9ca3af"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+            />
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeIcon}
+            >
+              <Feather
+                name={showPassword ? 'eye' : 'eye-off'}
+                size={20}
+                color="#9ca3af"
+              />
+            </TouchableOpacity>
+          </View>
+
+          {/* Forgot Password Link */}
+          <TouchableOpacity style={styles.forgotPassword}>
+            <Text style={styles.forgotPasswordText}>Quên mật khẩu?</Text>
+          </TouchableOpacity>
+
+          {/* Submit Button */}
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Đăng nhập</Text>
+            )}
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     </DismissKeyboard>
@@ -114,12 +119,12 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#16a34a',
     justifyContent: 'center',
   },
   formContainer: {
-    padding: 24,
     backgroundColor: '#fff',
+    padding: 24,
     margin: 20,
     borderRadius: 24,
     shadowColor: '#000',
@@ -134,8 +139,7 @@ const styles = StyleSheet.create({
   },
   logoImage: {
     width: 120,
-    height: 80,
-    borderRadius: 12,
+    height: 120,
   },
   title: {
     fontSize: 28,
@@ -194,20 +198,6 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
-  },
-  registerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 24,
-  },
-  registerText: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  registerLink: {
-    fontSize: 14,
-    color: '#22c55e',
     fontWeight: '600',
   },
 });
