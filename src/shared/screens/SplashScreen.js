@@ -8,7 +8,6 @@ import {
   StatusBar,
   Image,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width, height } = Dimensions.get('window');
@@ -126,7 +125,7 @@ export default function SplashScreen({ onFinish }) {
           >
             <View style={styles.logoInner}>
               <Image 
-                source={require('../../../assets/images/Logo_EBookFarm.jpg')} 
+                source={require('../../../assets/images/logo.png')} 
                 style={styles.logoImage}
                 resizeMode="contain"
               />
@@ -143,9 +142,9 @@ export default function SplashScreen({ onFinish }) {
             },
           ]}
         >
-          <Text style={styles.appName}>EBookFarm</Text>
-          <Text style={styles.tagline}>Nông nghiệp số</Text>
-          <Text style={styles.subtitle}>Quản lý nhật ký sản xuất thông minh</Text>
+          <Text style={styles.appName}>EAPLS</Text>
+          <Text style={styles.tagline}>Nhật Ký Sản Xuất Điện Tử</Text>
+          <Text style={styles.subtitle}>Thuận tiện - An toàn - Tiết kiệm</Text>
         </Animated.View>
 
         {/* Loading Indicator */}
@@ -185,7 +184,7 @@ export default function SplashScreen({ onFinish }) {
           },
         ]}
       >
-        <Text style={styles.brandingText}>Powered by EBookFarm Team</Text>
+        <Text style={styles.brandingText}>Powered by EAPLS Team</Text>
         <Text style={styles.versionText}>Version 1.2.0</Text>
       </Animated.View>
     </LinearGradient>
@@ -218,9 +217,9 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   logoBackground: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -228,9 +227,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   logoInner: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
@@ -242,8 +241,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   logoImage: {
-    width: 80,
-    height: 60,
+    width: 110,
+    height: 110,
   },
   textContainer: {
     alignItems: 'center',

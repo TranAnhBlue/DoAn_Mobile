@@ -6,6 +6,7 @@ const QUEUE_KEY = 'farm-leader:offline-queue';
  * @typedef {Object} OfflineLogEntry
  * @property {string} id - Unique ID của entry
  * @property {string} taskId
+ * @property {Object} task
  * @property {string} date - ISO string
  * @property {string} description
  * @property {Array} fertilizers
@@ -60,10 +61,39 @@ async function incrementRetry(id) {
   await saveAll(updated);
 }
 
+/** Reset retry count cho toàn bộ queue (dùng khi thử sync thủ công) */
+async function resetAllRetries() {
+  const queue = await getAll();
+  const updated = queue.map((entry) => ({ ...entry, retryCount: 0 }));
+  await saveAll(updated);
+}
+
 /** Trả về số lượng entry đang chờ */
 async function count() {
   const queue = await getAll();
   return queue.length;
 }
 
-export const offlineQueue = { enqueue, getAll, remove, incrementRetry, count };
+/** Trả về các entry đang chờ cho một taskId cụ thể */
+async function getByTask(taskId) {
+  if (!taskId) return [];
+  const queue = await getAll();
+  return queue.filter((entry) => String(entry.taskId) === String(taskId));
+}
+
+/** Trả về số lượng entry đang chờ cho một taskId cụ thể */
+async function countByTask(taskId) {
+  const entries = await getByTask(taskId);
+  return entries.length;
+}
+
+export const offlineQueue = {
+  enqueue,
+  getAll,
+  getByTask,
+  remove,
+  incrementRetry,
+  resetAllRetries,
+  count,
+  countByTask,
+};
