@@ -9,6 +9,7 @@ import ProfileScreen from "../features/profile/screens/ProfileScreen";
 
 const Tab = createBottomTabNavigator();
 
+<<<<<<< Updated upstream
 const TABS = [
   {
     name: "PlansAndLogs",
@@ -35,12 +36,22 @@ const TABS = [
     component: LandPlotsScreen,
   },
   { name: "Profile", label: "Cá nhân", icon: "user", component: ProfileScreen },
+=======
+const LEADER_TABS = [
+  { name: 'MyTasks', label: 'Công việc', icon: 'check-square', component: MyTasksScreen },
+  { name: 'Notifications', label: 'Thông báo', icon: 'bell', component: NotificationsScreen },
+  { name: 'Profile', label: 'Cá nhân', icon: 'user', component: ProfileScreen },
+>>>>>>> Stashed changes
 ];
 
 export default function MainTabNavigator() {
   return (
     <Tab.Navigator
+<<<<<<< Updated upstream
       initialRouteName="PlansAndLogs"
+=======
+      initialRouteName={supervisorMode ? 'SupervisorPlans' : 'MyTasks'}
+>>>>>>> Stashed changes
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarIcon: ({ color, size }) => {

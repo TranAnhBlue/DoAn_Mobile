@@ -19,9 +19,9 @@ import {
   View,
 } from 'react-native';
 
+import { formatVietnamDateTime } from '../../../features/notifications/utils/dateTime';
 import api from '../../../shared/api/client';
 import { extractItems, getApiErrorMessage, getEntityId, unwrapPayload } from '../../../shared/api/response';
-import { formatVietnamDateTime } from '../../../features/notifications/utils/dateTime';
 import { useNetworkStatus } from '../../../shared/hooks/useNetworkStatus';
 import { offlineQueue } from '../../../shared/services/offlineQueue';
 import FieldCameraScreen from './FieldCameraScreen';
@@ -55,6 +55,145 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
   const [cameraOpen, setCameraOpen] = useState(false);
   const taskId = getEntityId(task);
   const draftKey = taskId ? `farm-leader:daily-log-draft:${taskId}` : null;
+<<<<<<< Updated upstream
+=======
+  const localHistoryKey = taskId ? `farm-leader:sent-logs-history:${taskId}` : null;
+
+  const loadPendingLogs = useCallback(async () => {
+    if (!taskId) return [];
+    try {
+      const logs = await offlineQueue.getByTask(taskId);
+      setPendingLogs(logs);
+      return logs;
+    } catch {
+      setPendingLogs([]);
+      return [];
+    }
+  }, [taskId]);
+
+  const saveToLocalSentHistory = useCallback(async (newLog) => {
+    if (!localHistoryKey) return;
+    try {
+      const raw = await AsyncStorage.getItem(localHistoryKey);
+      const existing = raw ? JSON.parse(raw) : [];
+      const updated = [newLog, ...existing.filter((item) => item.id !== newLog.id)];
+      await AsyncStorage.setItem(localHistoryKey, JSON.stringify(updated.slice(0, 50)));
+    } catch (e) {
+      console.warn('[DailyLogModal] Không thể lưu lịch sử cục bộ:', e?.message);
+    }
+  }, [localHistoryKey]);
+
+  const fetchHistory = useCallback(async () => {
+    if (!taskId) return [];
+    setLoadingHistory(true);
+
+    let localSent = [];
+    if (localHistoryKey) {
+      try {
+        const raw = await AsyncStorage.getItem(localHistoryKey);
+        if (raw) localSent = JSON.parse(raw);
+      } catch { }
+    }
+
+    if (isOffline) {
+      setHistory(localSent);
+      setLoadingHistory(false);
+      return localSent;
+    }
+
+    try {
+      const endpoints = [
+        `/cultivation-tasks/${taskId}/daily-logs`,
+        `/cultivation-tasks/${taskId}/logs`,
+        `/cultivation-daily-logs/task/${taskId}`,
+        `/cultivation-daily-logs?taskId=${taskId}`,
+        `/cultivation-daily-logs?cultivationTaskId=${taskId}`,
+        `/cultivation-logs?taskId=${taskId}`,
+        `/cultivation-logs?cultivationTaskId=${taskId}`,
+        '/cultivation-daily-logs',
+        '/cultivation-logs',
+      ];
+
+      let serverItems = [];
+      for (const endpoint of endpoints) {
+        try {
+          const res = await api.get(endpoint);
+          const rawItems = extractItems(res.data) || (Array.isArray(res.data) ? res.data : []);
+          if (rawItems && rawItems.length) {
+            const filtered = rawItems.filter((item) => {
+              const itemTaskId = getEntityId(item.taskId) || item.taskId || item.cultivationTaskId;
+              return !itemTaskId || String(itemTaskId) === String(taskId);
+            });
+            if (filtered.length) {
+              serverItems = filtered;
+              break;
+            }
+          }
+        } catch (err) {
+          if (err?.response?.status !== 404) break;
+        }
+      }
+
+      const serverIds = new Set(serverItems.map((s) => getEntityId(s) || s.id));
+      const uniqueLocal = localSent.filter((l) => !serverIds.has(l.id));
+      const combined = [...serverItems, ...uniqueLocal];
+
+      setHistory(combined);
+      return combined;
+    } catch (err) {
+      console.warn('[DailyLogModal] Lỗi tải lịch sử:', err?.message);
+      setHistory(localSent);
+      return localSent;
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [isOffline, localHistoryKey, taskId]);
+
+  const handleManualSync = async () => {
+    if (isOffline) {
+      Alert.alert('Chưa có kết nối mạng', 'Vui lòng kết nối Wi-Fi hoặc Dữ liệu di động để đồng bộ.');
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      const { synced, failed, errors } = await syncAllPendingLogs({ force: true });
+      await loadPendingLogs();
+      await fetchHistory();
+
+      if (synced > 0 && failed === 0) {
+        Alert.alert('Thành công 🎉', `Đã đồng bộ ${synced} ghi chép offline lên server.`);
+        onSaved?.();
+      } else if (failed > 0) {
+        const errorMsg = errors[0]?.message || 'Lỗi không xác định';
+        Alert.alert(
+          'Đồng bộ chưa hoàn tất ⚠️',
+          `Đã đồng bộ ${synced} ghi chép. ${failed} ghi chép gặp lỗi: "${errorMsg}".\n\nBạn có thể thử lại hoặc xóa bản ghi lỗi bên dưới.`
+        );
+      } else {
+        Alert.alert('Thông báo', 'Không có ghi chép offline nào cần đồng bộ.');
+      }
+    } catch (error) {
+      Alert.alert('Lỗi đồng bộ', getApiErrorMessage(error, 'Vui lòng thử lại sau.'));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleDeletePending = (pendingId) => {
+    Alert.alert('Xóa ghi chép offline?', 'Bản ghi này chưa được gửi lên server và sẽ bị xóa vĩnh viễn.', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Xóa',
+        style: 'destructive',
+        onPress: async () => {
+          await offlineQueue.remove(pendingId);
+          await loadPendingLogs();
+        },
+      },
+    ]);
+  };
+>>>>>>> Stashed changes
 
   useEffect(() => {
     if (!visible) return;
@@ -84,8 +223,19 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
       });
     }
 
+<<<<<<< Updated upstream
     // Đọc pending offline count
     offlineQueue.count().then(setPendingCount);
+=======
+    loadPendingLogs().then((logs) => {
+      if (!isOffline && logs.length > 0) {
+        syncAllPendingLogs({ force: true })
+          .then(() => loadPendingLogs())
+          .then(() => fetchHistory())
+          .catch(() => { });
+      }
+    });
+>>>>>>> Stashed changes
 
     if (isOffline) {
       // Khi offline: dùng cache catalog đã lưu trước
@@ -96,10 +246,10 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
         const nextCatalogs = { fertilizer: [], pesticide: [] };
         let usedCache = false;
         if (fertRes.status === 'fulfilled' && fertRes.value) {
-          try { nextCatalogs.fertilizer = JSON.parse(fertRes.value); usedCache = true; } catch {}
+          try { nextCatalogs.fertilizer = JSON.parse(fertRes.value); usedCache = true; } catch { }
         }
         if (pestRes.status === 'fulfilled' && pestRes.value) {
-          try { nextCatalogs.pesticide = JSON.parse(pestRes.value); usedCache = true; } catch {}
+          try { nextCatalogs.pesticide = JSON.parse(pestRes.value); usedCache = true; } catch { }
         }
         setCatalogs(nextCatalogs);
         setCatalogFromCache(usedCache);
@@ -119,9 +269,14 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
       const nextErrors = {};
 
       if (fertilizerResult.status === 'fulfilled') {
+<<<<<<< Updated upstream
         nextCatalogs.fertilizer = extractItems(fertilizerResult.value.data);
         // Lưu cache để dùng khi offline
         AsyncStorage.setItem(CATALOG_CACHE_KEY.fertilizer, JSON.stringify(nextCatalogs.fertilizer)).catch(() => {});
+=======
+        nextCatalogs.fertilizer = fertilizerResult.value || [];
+        AsyncStorage.setItem(CATALOG_CACHE_KEY.fertilizer, JSON.stringify(nextCatalogs.fertilizer)).catch(() => { });
+>>>>>>> Stashed changes
       } else {
         nextErrors.fertilizer = fertilizerResult.reason?.response?.status === 403
           ? 'Tài khoản chưa được cấp quyền xem danh mục phân bón.'
@@ -129,9 +284,14 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
       }
 
       if (pesticideResult.status === 'fulfilled') {
+<<<<<<< Updated upstream
         nextCatalogs.pesticide = extractItems(pesticideResult.value.data);
         // Lưu cache để dùng khi offline
         AsyncStorage.setItem(CATALOG_CACHE_KEY.pesticide, JSON.stringify(nextCatalogs.pesticide)).catch(() => {});
+=======
+        nextCatalogs.pesticide = pesticideResult.value || [];
+        AsyncStorage.setItem(CATALOG_CACHE_KEY.pesticide, JSON.stringify(nextCatalogs.pesticide)).catch(() => { });
+>>>>>>> Stashed changes
       } else {
         nextErrors.pesticide = getApiErrorMessage(pesticideResult.reason, 'Không thể tải danh mục thuốc BVTV.');
       }
