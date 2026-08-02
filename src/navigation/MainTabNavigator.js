@@ -2,25 +2,22 @@ import { Feather } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useQuery } from '@tanstack/react-query';
 
+import { useAuthStore } from '../features/auth/store/authStore';
+import { isFarmSupervisor } from '../features/auth/utils/roles';
 import NotificationsScreen from '../features/notifications/screens/NotificationsScreen';
-import MyTasksScreen from '../roles/farm-leader/screens/MyTasksScreen';
-import PlansAndLogsScreen from '../roles/farm-leader/screens/PlansAndLogsScreen';
-import LandPlotsScreen from '../roles/farm-leader/screens/LandPlotsScreen';
 import ProfileScreen from '../features/profile/screens/ProfileScreen';
 import FarmersScreen from '../roles/farm-supervisor/screens/FarmersScreen';
 import SupervisorPlansScreen from '../roles/farm-supervisor/screens/SupervisorPlansScreen';
-import { useAuthStore } from '../features/auth/store/authStore';
-import { isFarmSupervisor } from '../features/auth/utils/roles';
+import LandPlotsScreen from '../roles/farm-leader/screens/LandPlotsScreen';
+import MyTasksScreen from '../roles/farm-leader/screens/MyTasksScreen';
 import api from '../shared/api/client';
 import { extractItems, unwrapPayload } from '../shared/api/response';
 
 const Tab = createBottomTabNavigator();
 
 const LEADER_TABS = [
-  { name: 'PlansAndLogs', label: 'Kế hoạch\n& Ghi chép', icon: 'edit', component: PlansAndLogsScreen },
   { name: 'MyTasks', label: 'Công việc', icon: 'check-square', component: MyTasksScreen },
   { name: 'Notifications', label: 'Thông báo', icon: 'bell', component: NotificationsScreen },
-  { name: 'LandPlots', label: 'Vùng trồng', icon: 'map', component: LandPlotsScreen },
   { name: 'Profile', label: 'Cá nhân', icon: 'user', component: ProfileScreen },
 ];
 
@@ -63,7 +60,7 @@ export default function MainTabNavigator() {
 
   return (
     <Tab.Navigator
-      initialRouteName={supervisorMode ? 'SupervisorPlans' : 'PlansAndLogs'}
+      initialRouteName={supervisorMode ? 'SupervisorPlans' : 'MyTasks'}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarIcon: ({ color, size }) => {
@@ -78,9 +75,14 @@ export default function MainTabNavigator() {
           paddingTop: 7,
           backgroundColor: '#fff',
           borderTopColor: '#e2e8f0',
+          borderTopWidth: 1,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
         },
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: '700',
           textAlign: 'center',
         },
