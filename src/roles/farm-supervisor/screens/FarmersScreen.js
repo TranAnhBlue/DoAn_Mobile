@@ -1,9 +1,10 @@
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { extractItems, getApiErrorMessage } from '../../../shared/api/response';
+import { resolveAvatarUrl } from '../../../shared/utils/format';
 import supervisorApi from '../api/supervisorApi';
 
 const rolesOf = (user) => (Array.isArray(user?.roles) ? user.roles : [user?.role]).map((role) => String(role || '').toUpperCase());
@@ -75,13 +76,20 @@ export default function FarmersScreen({ navigation }) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} colors={['#15803d']} />}
         renderItem={({ item }) => {
           const leader = rolesOf(item).includes('FARM_LEADER');
+          const avatarUrl = resolveAvatarUrl(item.avatarUrl || item.avatar || item.user?.avatarUrl || item.user?.avatar);
           return (
             <TouchableOpacity
               style={styles.card}
               activeOpacity={0.75}
               onPress={() => navigation.navigate('FarmerDetail', { userId: item.id, user: item })}
             >
-              <View style={styles.avatar}><Text style={styles.avatarText}>{(item.fullName || item.email || 'N').charAt(0).toUpperCase()}</Text></View>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              ) : (
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{(item.fullName || item.email || 'N').charAt(0).toUpperCase()}</Text>
+                </View>
+              )}
               <View style={styles.person}><Text style={styles.name}>{item.fullName || item.email}</Text><Text style={styles.contact}>{item.phoneNumber || item.email || 'Chưa có liên hệ'}</Text><View style={styles.tags}><View style={[styles.roleBadge, leader && styles.leaderBadge]}><Text style={[styles.roleText, leader && styles.leaderText]}>{leader ? 'Farm Leader' : 'Nông dân'}</Text></View><Text style={styles.taskCount}>{assignedCount(item.id)} việc được giao</Text></View></View>
               <View style={[styles.activeDot, !item.isActive && styles.inactiveDot]} />
               <Feather name="chevron-right" size={18} color="#94a3b8" style={styles.chevron} />
@@ -105,6 +113,7 @@ const styles = StyleSheet.create({
   list: { padding: 14, paddingBottom: 96 },
   card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 15, padding: 14, marginBottom: 10, elevation: 1, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6 },
   avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#dcfce7', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  avatarImage: { width: 48, height: 48, borderRadius: 24, marginRight: 12, backgroundColor: '#f1f5f9' },
   avatarText: { color: '#15803d', fontSize: 18, fontWeight: '900' },
   person: { flex: 1 },
   name: { color: '#0f172a', fontSize: 15, fontWeight: '900' },
