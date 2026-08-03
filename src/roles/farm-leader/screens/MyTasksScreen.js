@@ -26,7 +26,7 @@ import api from '../../../shared/api/client';
 import { extractItems, getEntityId } from '../../../shared/api/response';
 import { offlineQueue } from '../../../shared/services/offlineQueue';
 import { normalizeStatus, STATUS, valueOf } from '../../../shared/utils/data';
-import { dateOf, dateTimeOf, formatDateVN, resolveAvatarUrl, sortLogsDescending } from '../../../shared/utils/format';
+import { dateOf, dateTimeOf, formatDateVN, formatNumber, resolveAvatarUrl, sortLogsDescending } from '../../../shared/utils/format';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DetailCell component
@@ -532,7 +532,7 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
                                 </View>
                                 {item.fertilizers.map((f, fIdx) => (
                                   <Text key={fIdx} style={ds.historyMaterialItemGreen}>
-                                    • <Text style={{ fontWeight: '700', color: '#1e293b' }}>{valueOf(f.name, f.fertilizerName, 'Phân bón')}</Text>: <Text style={{ color: '#15803d', fontWeight: '800' }}>{f.quantity || f.amount || 1} {valueOf(f.unit, 'kg')}</Text>{(f.area || f.totalArea) ? ` (${f.area || f.totalArea} m²)` : ''}
+                                    • <Text style={{ fontWeight: '700', color: '#1e293b' }}>{valueOf(f.name, f.fertilizerName, 'Phân bón')}</Text>: <Text style={{ color: '#15803d', fontWeight: '800' }}>{formatNumber(f.quantity || f.amount || 1)} {valueOf(f.unit, 'kg')}</Text>{(f.area || f.totalArea) ? ` (${formatNumber(f.area || f.totalArea)} m²)` : ''}
                                   </Text>
                                 ))}
                               </View>

@@ -10,8 +10,8 @@ const STATUS = {
   DRAFT: ['Nháp', '#64748b'],
   PENDING_REVIEW: ['Chờ duyệt', '#d97706'],
   PLANNED: ['Đã lên kế hoạch', '#2563eb'],
-  IN_PROGRESS: ['Đang thực hiện', '#15803d'],
-  COMPLETED: ['Hoàn thành', '#059669'],
+  IN_PROGRESS: ['Đang thực hiện', '#2563eb'],
+  COMPLETED: ['Hoàn thành', '#15803d'],
   CANCELLED: ['Đã hủy', '#64748b'],
 };
 
@@ -59,7 +59,7 @@ export default function SupervisorPlansScreen({ navigation }) {
             <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('SupervisorPlanDetail', { planId: getEntityId(item) })}>
               <View style={styles.cardHeader}>
                 <View style={styles.planIcon}><Feather name="clipboard" size={20} color="#15803d" /></View>
-                <View style={styles.cardTitleWrap}><Text style={styles.planName}>{item.planName || item.name || 'Kế hoạch canh tác'}</Text><Text style={styles.crop}>{item.cropName || 'Chưa có cây trồng'}</Text></View>
+                <View style={styles.cardTitleWrap}><Text style={styles.planName}>{item.logbookName || item.planName || item.name || `Quy trình trồng ${item.cropName || 'cây'}`}</Text><Text style={styles.crop}>{item.cropName || 'Chưa có cây trồng'}</Text></View>
                 <Feather name="chevron-right" size={21} color="#94a3b8" />
               </View>
               <View style={styles.metaRow}><Feather name="user" size={14} color="#64748b" /><Text style={styles.meta}>{item.supervisorName || 'Chưa phân công giám sát'}</Text></View>

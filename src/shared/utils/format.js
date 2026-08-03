@@ -106,3 +106,15 @@ export const sortLogsDescending = (logs) => {
   });
 };
 
+/**
+ * Format a number to at most maxDecimals places, removing trailing zeros.
+ * Example: formatNumber(0.7777, 3) => "0.778"
+ */
+export const formatNumber = (val, maxDecimals = 3) => {
+  if (val === undefined || val === null || val === '') return '';
+  const num = Number(val);
+  if (isNaN(num)) return String(val);
+  return String(Number(num.toFixed(maxDecimals)));
+};
+
+
