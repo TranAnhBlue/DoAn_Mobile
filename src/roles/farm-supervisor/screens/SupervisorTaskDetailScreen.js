@@ -95,19 +95,23 @@ export default function SupervisorTaskDetailScreen({ navigation, route }) {
         <View style={styles.heroCard}>
           <View style={styles.titleRow}><View style={styles.taskIcon}><Feather name="check-square" size={23} color="#15803d" /></View><Text style={styles.taskName}>{task?.name || 'Công việc'}</Text><View style={[styles.status, { backgroundColor: `${statusColor}18` }]}><Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text></View></View>
           {task?.description ? <Text style={styles.description}>{task.description}</Text> : <Text style={styles.descriptionEmpty}>Chưa có mô tả công việc.</Text>}
-          <View style={styles.progressHeader}><Text style={styles.progressLabel}>Tiến độ thực hiện</Text><Text style={styles.progressValue}>{progress}%</Text></View>
-          <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, progress))}%` }]} /></View>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Thông tin công việc</Text>
           <Info icon="calendar" label="Ngày bắt đầu" value={dateLabel(task?.startDate)} />
-          <Info icon="clock" label="Hạn hoàn thành" value={dateLabel(task?.dueDate)} />
-          <Info icon="check-circle" label="Ngày hoàn thành" value={task?.completedDate ? dateLabel(task.completedDate) : 'Chưa hoàn thành'} />
-          <Info icon="hash" label="Mã thư viện" value={task?.taskLibraryCode} last />
+          <Info icon="check-circle" label="Ngày hoàn thành" value={task?.completedDate ? dateLabel(task.completedDate) : 'Chưa hoàn thành'} last />
         </View>
 
-        <View style={styles.sectionHeader}><Text style={styles.sectionHeading}>Nhân sự thực hiện</Text><TouchableOpacity style={styles.assignAction} onPress={() => setAssigning(true)}><Feather name="user-plus" size={15} color="#2563eb" /><Text style={styles.assignActionText}>Phân công</Text></TouchableOpacity></View>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionHeading}>Nhân sự thực hiện</Text>
+          {!['COMPLETED', 'CANCELLED'].includes(status) ? (
+            <TouchableOpacity style={styles.assignAction} onPress={() => setAssigning(true)}>
+              <Feather name="user-plus" size={15} color="#2563eb" />
+              <Text style={styles.assignActionText}>Phân công</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
         <View style={styles.card}>
           <TouchableOpacity style={styles.personRow} disabled={!task?.assignedLeaderId} onPress={() => navigation.navigate('FarmerDetail', { userId: task.assignedLeaderId })}>
             <View style={styles.leaderIcon}><Feather name="user-check" size={18} color="#1d4ed8" /></View><View style={styles.personText}><Text style={styles.personRole}>Farm Leader</Text><Text style={styles.personName}>{task?.assignedLeaderName || 'Chưa phân công'}</Text></View>{task?.assignedLeaderId ? <Feather name="chevron-right" size={18} color="#94a3b8" /> : null}
@@ -124,7 +128,7 @@ export default function SupervisorTaskDetailScreen({ navigation, route }) {
         <Text style={styles.sectionHeading}>Nhật ký hàng ngày ({logs.length})</Text>
         {logs.map((log, index) => (
           <View key={getEntityId(log) || index} style={styles.logCard}>
-            <View style={styles.logTop}><View style={styles.logDate}><Feather name="calendar" size={14} color="#15803d" /><Text style={styles.logDateText}>{formatVietnamDateTime(valueOf(log.createdAt, log.logDate, log.performedAt), 'Không xác định')}</Text></View>{log.progress != null ? <Text style={styles.logProgress}>{log.progress}%</Text> : null}</View>
+            <View style={styles.logTop}><View style={styles.logDate}><Feather name="calendar" size={14} color="#15803d" /><Text style={styles.logDateText}>{formatVietnamDateTime(valueOf(log.createdAt, log.logDate, log.performedAt), 'Không xác định')}</Text></View></View>
             <Text style={styles.logDescription}>{valueOf(log.description, log.notes, log.content, 'Không có mô tả')}</Text>
             {valueOf(log.createdByName, log.leaderName, log.farmerName) ? <Text style={styles.logAuthor}>Ghi bởi: {valueOf(log.createdByName, log.leaderName, log.farmerName)}</Text> : null}
           </View>

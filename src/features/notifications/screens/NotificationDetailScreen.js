@@ -20,7 +20,6 @@ export default function NotificationDetailScreen({ navigation, route }) {
       .catch(() => {});
   }, [id, queryClient, unread]);
 
-  const type = notification.type || notification.notificationType;
   const content = notification.message || notification.content || notification.body || 'Thông báo này không có nội dung.';
 
   return (
@@ -38,7 +37,6 @@ export default function NotificationDetailScreen({ navigation, route }) {
           <View style={styles.divider} />
           <Text style={styles.contentLabel}>Nội dung</Text>
           <Text style={styles.message}>{content}</Text>
-          {type ? <View style={styles.metaBox}><Text style={styles.metaLabel}>Loại thông báo</Text><Text style={styles.metaValue}>{type}</Text></View> : null}
           {notification.senderName || notification.createdByName ? <View style={styles.metaBox}><Text style={styles.metaLabel}>Người gửi</Text><Text style={styles.metaValue}>{notification.senderName || notification.createdByName}</Text></View> : null}
         </View>
       </ScrollView>

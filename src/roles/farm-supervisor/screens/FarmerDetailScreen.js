@@ -6,8 +6,40 @@ import { ActivityIndicator, Image, RefreshControl, ScrollView, StyleSheet, Text,
 import { extractItems, getApiErrorMessage, getEntityId, unwrapPayload } from '../../../shared/api/response';
 import supervisorApi from '../api/supervisorApi';
 
-const assignmentUserId = (item) => item?.userId || item?.farmerId || item?.assignedUserId;
+const sameId = (a, b) => a != null && b != null && String(a).trim() === String(b).trim();
+const assignmentUserId = (item) => {
+  if (!item) return null;
+  if (typeof item === 'string' || typeof item === 'number') return item;
+  return item.userId || item.farmerId || item.assignedUserId || item.id || item.user?.id || item.farmer?.id;
+};
+
+const isUserAssignedToTask = (task, userId) => {
+  if (!task || !userId) return false;
+  const uId = String(userId).trim();
+  if (sameId(task.assignedLeaderId, uId) || sameId(task.leaderId, uId) || sameId(task.assignedUserId, uId) || sameId(task.userId, uId)) return true;
+  const list = task.assignments || task.assignees || task.farmers || task.members || task.workers || task.assignedUsers || [];
+  if (Array.isArray(list) && list.some((item) => sameId(assignmentUserId(item), uId))) return true;
+  const idList = task.farmerIds || task.assignedFarmerIds || task.userIds || [];
+  if (Array.isArray(idList) && idList.some((id) => sameId(id, uId))) return true;
+  return false;
+};
 const dateLabel = (value) => value ? new Date(value).toLocaleDateString('vi-VN') : 'Chưa cập nhật';
+
+const TASK_STATUS_MAP = {
+  PENDING: 'Chờ kích hoạt',
+  PLANNED: 'Đã lên lịch',
+  ACTIVE: 'Đang hoạt động',
+  IN_PROGRESS: 'Đang thực hiện',
+  COMPLETED: 'Hoàn thành',
+  CANCELLED: 'Đã hủy',
+  DRAFT: 'Nháp',
+};
+
+const getStatusLabel = (status) => {
+  if (!status) return 'Chưa xác định';
+  const key = String(status).toUpperCase();
+  return TASK_STATUS_MAP[key] || status;
+};
 
 export default function FarmerDetailScreen({ navigation, route }) {
   const userId = route.params?.userId;
@@ -37,10 +69,7 @@ export default function FarmerDetailScreen({ navigation, route }) {
 
   useFocusEffect(useCallback(() => { fetchDetail(); }, [fetchDetail]));
 
-  const assignedTasks = useMemo(() => tasks.filter((task) => (
-    task.assignedLeaderId === userId
-    || (task.assignments || []).some((assignment) => assignmentUserId(assignment) === userId)
-  )), [tasks, userId]);
+  const assignedTasks = useMemo(() => tasks.filter((task) => isUserAssignedToTask(task, userId)), [tasks, userId]);
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#15803d" /></View>;
 
@@ -81,7 +110,7 @@ export default function FarmerDetailScreen({ navigation, route }) {
         {assignedTasks.map((task) => (
           <TouchableOpacity key={getEntityId(task)} style={styles.taskCard} onPress={() => navigation.navigate('SupervisorTaskDetail', { taskId: getEntityId(task), task })}>
             <View style={styles.taskIcon}><Feather name="check-square" size={18} color="#15803d" /></View>
-            <View style={styles.taskText}><Text style={styles.taskName}>{task.name}</Text><Text style={styles.taskMeta}>Tiến độ {task.progress || 0}% · {task.status || 'Chưa xác định'}</Text></View>
+            <View style={styles.taskText}><Text style={styles.taskName}>{task.name}</Text><Text style={styles.taskMeta}>{getStatusLabel(task.status)}</Text></View>
             <Feather name="chevron-right" size={19} color="#94a3b8" />
           </TouchableOpacity>
         ))}

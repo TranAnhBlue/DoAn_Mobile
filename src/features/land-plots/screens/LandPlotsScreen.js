@@ -5,8 +5,8 @@ import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, Touchabl
 
 import api from '../../../shared/api/client';
 import { extractItems, getApiErrorMessage, getEntityId } from '../../../shared/api/response';
-
-const valueOf = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
+import { valueOf } from '../../../shared/utils/data';
+import { formatNumber } from '../../../shared/utils/format';
 
 export default function LandPlotsScreen({ navigation }) {
   const [plots, setPlots] = useState([]);
@@ -56,14 +56,12 @@ export default function LandPlotsScreen({ navigation }) {
                 <View style={styles.icon}><Feather name="map-pin" size={20} color="#15803d" /></View>
                 <View style={styles.titleContent}>
                   <Text style={styles.title}>{valueOf(item.name, item.landPlotName, item.plotName, item.code, 'Thửa đất')}</Text>
-                  <Text style={styles.code}>{valueOf(item.code, item.landPlotCode, 'Chưa có mã')}</Text>
                 </View>
                 {status ? <View style={[styles.badge, active && styles.badgeActive]}><Text style={[styles.badgeText, active && styles.badgeTextActive]}>{active ? 'Hoạt động' : status}</Text></View> : null}
                 <Feather name="chevron-right" size={19} color="#94a3b8" style={styles.chevron} />
               </View>
               <View style={styles.details}>
-                <Text style={styles.detail}>Diện tích: <Text style={styles.detailValue}>{valueOf(item.area, item.totalArea, item.actualArea, '--')} ha</Text></Text>
-                <Text style={styles.detail}>Loại đất: <Text style={styles.detailValue}>{valueOf(item.soilTypeName, item.soilType?.name, '--')}</Text></Text>
+                <Text style={styles.detail}>Diện tích: <Text style={styles.detailValue}>{valueOf(item.area, item.totalArea, item.actualArea) != null ? `${formatNumber(valueOf(item.area, item.totalArea, item.actualArea))} m²` : '--'}</Text></Text>
                 <Text style={styles.detail}>Địa chỉ: <Text style={styles.detailValue}>{valueOf(item.address, item.location, '--')}</Text></Text>
               </View>
             </TouchableOpacity>

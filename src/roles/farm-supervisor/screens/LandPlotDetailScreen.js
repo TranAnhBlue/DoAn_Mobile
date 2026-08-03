@@ -5,6 +5,7 @@ import { ActivityIndicator, Image, RefreshControl, ScrollView, StyleSheet, Text,
 
 import { extractItems, getApiErrorMessage, getEntityId, unwrapPayload } from '../../../shared/api/response';
 import { formatVietnamDateTime } from '../../../features/notifications/utils/dateTime';
+import { formatNumber } from '../../../shared/utils/format';
 import supervisorApi from '../api/supervisorApi';
 
 const valueOf = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
@@ -51,17 +52,14 @@ export default function LandPlotDetailScreen({ navigation, route }) {
         {plot?.imageUrl ? <Image source={{ uri: plot.imageUrl }} style={styles.cover} /> : <View style={styles.coverFallback}><Feather name="map" size={45} color="#15803d" /><Text style={styles.coverText}>Vùng trồng EAPLS</Text></View>}
 
         <View style={styles.titleCard}>
-          <View style={styles.titleLine}><View style={styles.pin}><Feather name="map-pin" size={21} color="#15803d" /></View><View style={styles.titleText}><Text style={styles.name}>{plot?.name || 'Vùng trồng'}</Text><Text style={styles.code}>{plot?.code || 'Chưa có mã vùng'}</Text></View><View style={[styles.status, active && styles.statusActive]}><Text style={[styles.statusText, active && styles.statusTextActive]}>{active ? 'Hoạt động' : plot?.status || 'Không rõ'}</Text></View></View>
+          <View style={styles.titleLine}><View style={styles.pin}><Feather name="map-pin" size={21} color="#15803d" /></View><View style={styles.titleText}><Text style={styles.name}>{plot?.name || 'Vùng trồng'}</Text></View><View style={[styles.status, active && styles.statusActive]}><Text style={[styles.statusText, active && styles.statusTextActive]}>{active ? 'Hoạt động' : plot?.status || 'Không rõ'}</Text></View></View>
           {plot?.description ? <Text style={styles.description}>{plot.description}</Text> : null}
         </View>
 
         <Text style={styles.sectionHeading}>Thông tin vùng trồng</Text>
         <View style={styles.card}>
-          <Info icon="maximize" label="Diện tích" value={`${valueOf(plot?.area, '--')} ${plot?.areaUnit || 'ha'}`} />
-          <Info icon="layers" label="Loại đất" value={valueOf(plot?.soilTypeName, plot?.soilType?.name, plot?.soilTypeId)} />
-          <Info icon="home" label="Hình thức sở hữu" value={plot?.ownershipType} />
-          <Info icon="map-pin" label="Địa chỉ" value={plot?.address} />
-          <Info icon="navigation" label="Tọa độ GPS" value={plot?.latitude != null && plot?.longitude != null ? `${plot.latitude}, ${plot.longitude}` : null} last />
+          <Info icon="maximize" label="Diện tích" value={plot?.area != null ? `${formatNumber(plot.area)} m²` : '--'} />
+          <Info icon="map-pin" label="Địa chỉ" value={plot?.address} last />
         </View>
 
         <Text style={styles.sectionHeading}>Thời tiết hiện tại</Text>
