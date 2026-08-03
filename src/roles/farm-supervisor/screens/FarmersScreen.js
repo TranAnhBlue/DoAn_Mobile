@@ -7,7 +7,23 @@ import { extractItems, getApiErrorMessage } from '../../../shared/api/response';
 import supervisorApi from '../api/supervisorApi';
 
 const rolesOf = (user) => (Array.isArray(user?.roles) ? user.roles : [user?.role]).map((role) => String(role || '').toUpperCase());
-const assignmentUserId = (item) => item?.userId || item?.farmerId || item?.assignedUserId || item?.id;
+const sameId = (a, b) => a != null && b != null && String(a).trim() === String(b).trim();
+const assignmentUserId = (item) => {
+  if (!item) return null;
+  if (typeof item === 'string' || typeof item === 'number') return item;
+  return item.userId || item.farmerId || item.assignedUserId || item.id || item.user?.id || item.farmer?.id;
+};
+
+const isUserAssignedToTask = (task, userId) => {
+  if (!task || !userId) return false;
+  const uId = String(userId).trim();
+  if (sameId(task.assignedLeaderId, uId) || sameId(task.leaderId, uId) || sameId(task.assignedUserId, uId) || sameId(task.userId, uId)) return true;
+  const list = task.assignments || task.assignees || task.farmers || task.members || task.workers || task.assignedUsers || [];
+  if (Array.isArray(list) && list.some((item) => sameId(assignmentUserId(item), uId))) return true;
+  const idList = task.farmerIds || task.assignedFarmerIds || task.userIds || [];
+  if (Array.isArray(idList) && idList.some((id) => sameId(id, uId))) return true;
+  return false;
+};
 
 export default function FarmersScreen({ navigation }) {
   const [users, setUsers] = useState([]);
@@ -43,10 +59,7 @@ export default function FarmersScreen({ navigation }) {
     });
   }, [search, users]);
 
-  const assignedCount = (userId) => tasks.filter((task) => (
-    task.assignedLeaderId === userId
-    || (task.assignments || []).some((assignment) => assignmentUserId(assignment) === userId)
-  )).length;
+  const assignedCount = (userId) => tasks.filter((task) => isUserAssignedToTask(task, userId)).length;
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#15803d" /></View>;
 
