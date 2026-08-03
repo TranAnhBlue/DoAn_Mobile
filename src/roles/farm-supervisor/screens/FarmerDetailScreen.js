@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { extractItems, getApiErrorMessage, getEntityId, unwrapPayload } from '../../../shared/api/response';
+import { resolveAvatarUrl } from '../../../shared/utils/format';
 import supervisorApi from '../api/supervisorApi';
 
 const sameId = (a, b) => a != null && b != null && String(a).trim() === String(b).trim();
@@ -24,6 +25,14 @@ const isUserAssignedToTask = (task, userId) => {
   return false;
 };
 const dateLabel = (value) => value ? new Date(value).toLocaleDateString('vi-VN') : 'Chưa cập nhật';
+
+const genderLabel = (val) => {
+  if (!val) return null;
+  const str = String(val).toUpperCase().trim();
+  if (str === 'MALE' || str === 'NAM' || str === '1') return 'Nam';
+  if (str === 'FEMALE' || str === 'NỮ' || str === 'NU' || str === '0' || str === '2') return 'Nữ';
+  return val;
+};
 
 const TASK_STATUS_MAP = {
   PENDING: 'Chờ kích hoạt',
@@ -74,7 +83,7 @@ export default function FarmerDetailScreen({ navigation, route }) {
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#15803d" /></View>;
 
   const roles = Array.isArray(user?.roles) ? user.roles : [user?.role].filter(Boolean);
-  const avatar = user?.avatarUrl || user?.avatar;
+  const avatar = resolveAvatarUrl(user?.avatarUrl || user?.avatar || user?.imageUrl);
   const name = user?.fullName || user?.fullname || user?.email || 'Nhân sự';
 
   return (
@@ -101,7 +110,7 @@ export default function FarmerDetailScreen({ navigation, route }) {
           <InfoRow icon="mail" label="Email" value={user?.email} />
           <InfoRow icon="phone" label="Số điện thoại" value={user?.phoneNumber || user?.phone} />
           <InfoRow icon="calendar" label="Ngày sinh" value={dateLabel(user?.dateOfBirth)} />
-          <InfoRow icon="user" label="Giới tính" value={user?.gender} />
+          <InfoRow icon="user" label="Giới tính" value={genderLabel(user?.gender)} />
           <InfoRow icon="briefcase" label="Vị trí" value={user?.position} />
           <InfoRow icon="map-pin" label="Địa chỉ" value={user?.address} last />
         </View>
