@@ -25,6 +25,7 @@ import { formatVietnamDateTime } from '../../../features/notifications/utils/dat
 import { useNetworkStatus } from '../../../shared/hooks/useNetworkStatus';
 import { offlineQueue } from '../../../shared/services/offlineQueue';
 import { syncAllPendingLogs } from '../../../shared/services/syncDailyLogs';
+import { sortLogsDescending } from '../../../shared/utils/format';
 import FieldCameraScreen from './FieldCameraScreen';
 
 const CATALOG_CACHE_KEY = {
@@ -81,12 +82,13 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
     try {
       const raw = await AsyncStorage.getItem(localHistoryKey);
       const existing = raw ? JSON.parse(raw) : [];
-      const updated = [newLog, ...existing.filter((item) => item.id !== newLog.id)];
+      const updated = sortLogsDescending([newLog, ...existing.filter((item) => item.id !== newLog.id)]);
       await AsyncStorage.setItem(localHistoryKey, JSON.stringify(updated.slice(0, 50)));
     } catch (e) {
       console.warn('[DailyLogModal] Không thể lưu lịch sử cục bộ:', e?.message);
     }
   }, [localHistoryKey]);
+
 
   const fetchHistory = useCallback(async () => {
     if (!taskId) return [];
@@ -141,18 +143,20 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
 
       const serverIds = new Set(serverItems.map((s) => getEntityId(s) || s.id));
       const uniqueLocal = localSent.filter((l) => !serverIds.has(l.id));
-      const combined = [...serverItems, ...uniqueLocal];
+      const combined = sortLogsDescending([...serverItems, ...uniqueLocal]);
 
       setHistory(combined);
       return combined;
     } catch (err) {
       console.warn('[DailyLogModal] Lỗi tải lịch sử:', err?.message);
-      setHistory(localSent);
-      return localSent;
+      const sortedLocal = sortLogsDescending(localSent);
+      setHistory(sortedLocal);
+      return sortedLocal;
     } finally {
       setLoadingHistory(false);
     }
   }, [isOffline, localHistoryKey, taskId]);
+
 
   const handleManualSync = async () => {
     if (isOffline) {

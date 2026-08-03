@@ -60,3 +60,49 @@ export const dateOf = (value) => (value ? formatDateVN(value) : 'Chưa xác đ�
  * Format datetime in Vietnamese locale.
  */
 export const dateTimeOf = (value) => formatVietnamDateTime(value, 'Chưa xác định');
+
+/**
+ * Robust date parser returning milliseconds timestamp (0 if invalid).
+ */
+export const getTimeMs = (val) => {
+  if (!val) return 0;
+  if (typeof val === 'number') return val;
+  if (val instanceof Date) return isNaN(val.getTime()) ? 0 : val.getTime();
+  if (typeof val === 'object') {
+    const raw =
+      val.createdAt || val.loggedAt || val.activityDate || val.logDate ||
+      val.performedAt || val.workDate || val.createdDate || val.date || val.updatedAt;
+    return getTimeMs(raw);
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return 0;
+    if (/^\d{2}\/\d{2}\/\d{4}/.test(trimmed)) {
+      const parts = trimmed.split(' ');
+      const [d, m, y] = parts[0].split('/');
+      const timeStr = parts[1] || '00:00:00';
+      const isoStr = `${y}-${m}-${d}T${timeStr}`;
+      const ts = new Date(isoStr).getTime();
+      if (!isNaN(ts)) return ts;
+    }
+    const ts = new Date(trimmed).getTime();
+    if (!isNaN(ts)) return ts;
+  }
+  return 0;
+};
+
+/**
+ * Sorts array of daily logs or activity logs in descending order (newest first).
+ */
+export const sortLogsDescending = (logs) => {
+  if (!Array.isArray(logs)) return [];
+  return [...logs].sort((a, b) => {
+    const timeA = getTimeMs(a);
+    const timeB = getTimeMs(b);
+    if (timeA !== timeB) return timeB - timeA;
+    const idA = Number(a?.id || a?._id || 0);
+    const idB = Number(b?.id || b?._id || 0);
+    return idB - idA;
+  });
+};
+

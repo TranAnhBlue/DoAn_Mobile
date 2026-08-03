@@ -26,7 +26,7 @@ import api from '../../../shared/api/client';
 import { extractItems, getEntityId } from '../../../shared/api/response';
 import { offlineQueue } from '../../../shared/services/offlineQueue';
 import { normalizeStatus, STATUS, valueOf } from '../../../shared/utils/data';
-import { dateOf, dateTimeOf, formatDateVN, resolveAvatarUrl } from '../../../shared/utils/format';
+import { dateOf, dateTimeOf, formatDateVN, resolveAvatarUrl, sortLogsDescending } from '../../../shared/utils/format';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DetailCell component
@@ -166,15 +166,11 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
       finalHistory = combinedList;
     }
 
-    const sortedHistory = finalHistory.sort((a, b) => {
-      const dateA = new Date(valueOf(a.createdAt, a.activityDate, a.logDate, a.performedAt, a.date, 0)).getTime();
-      const dateB = new Date(valueOf(b.createdAt, b.activityDate, b.logDate, b.performedAt, b.date, 0)).getTime();
-      return dateB - dateA;
-    });
-
+    const sortedHistory = sortLogsDescending(finalHistory);
     setHistory(sortedHistory);
     setLoadingHistory(false);
   }, [taskId]);
+
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
