@@ -4,6 +4,7 @@ export default {
   expo: {
     name: "EAPLS Mobile",
     slug: "eapls-mobile",
+    owner: "trananhblue",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
@@ -46,6 +47,9 @@ export default {
     extra: {
       apiUrl: process.env.VITE_API_URL || process.env.VITE_API_ROOT || 'https://api.eapls.io.vn/api',
       googleClientId: process.env.VITE_GOOGLE_CLIENT_ID,
+      eas: {
+        projectId: "980da3ad-6cfc-48a7-afa2-b2496475dfee"
+      }
     }
   }
 };

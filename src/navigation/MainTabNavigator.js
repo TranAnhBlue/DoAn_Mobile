@@ -16,7 +16,7 @@ import { extractItems, unwrapPayload } from '../shared/api/response';
 const Tab = createBottomTabNavigator();
 
 const LEADER_TABS = [
-  { name: 'MyTasks', label: 'Công việc', icon: 'check-square', component: MyTasksScreen },
+  { name: 'MyTasks', label: 'Nhật ký', icon: 'book-open', component: MyTasksScreen },
   { name: 'Notifications', label: 'Thông báo', icon: 'bell', component: NotificationsScreen },
   { name: 'Profile', label: 'Cá nhân', icon: 'user', component: ProfileScreen },
 ];

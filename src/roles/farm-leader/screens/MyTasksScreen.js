@@ -836,8 +836,8 @@ export default function MyTasksScreen({ navigation, route }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Công việc của tôi</Text>
-        <Text style={styles.headerSubtitle}>Cập nhật tiến độ và ghi chép hằng ngày</Text>
+        <Text style={styles.headerTitle}>Danh sách nhật ký</Text>
+        <Text style={styles.headerSubtitle}>Theo dõi nhật ký và tiến độ các giai đoạn canh tác</Text>
       </View>
       <View style={styles.filtersContainer}>
         <ScrollView
@@ -872,12 +872,33 @@ export default function MyTasksScreen({ navigation, route }) {
           const [label, color, bg, text] = STATUS[state] || [item.status || 'Đang thực hiện', '#15803d', '#dcfce7', '#166534'];
           const canWriteLog = state === 'IN_PROGRESS';
           const startDateStr = dateOf(valueOf(item.startDate, item.plannedStartDate, item.activityDate, item.createdAt, item.dueDate, item.endDate));
-          const locationStr = valueOf(item.landPlotName, item.landPlotNames, item.landPlot?.name, item.logbookName, item.stageName);
-          const stageOrPlan = valueOf(item.stageName, item.logbookName, item.planName, item.cropName);
+          const locationStr = valueOf(item.landPlotName, item.landPlotNames, item.landPlot?.name, item.logbookName);
+          const stageName = valueOf(item.stageName, item.cultivationStageName, item.stage?.name);
+          const planName = valueOf(item.planName, item.logbookName, item.cropName, item.cultivationLogbookName, item.logbook?.name);
 
           return (
-            <View style={styles.card}>
-              {stageOrPlan ? <Text style={styles.planSubTag}>📌 {stageOrPlan}</Text> : null}
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.88}
+              onPress={() => setDetailTask(item)}
+            >
+              {(stageName || planName) ? (
+                <View style={styles.tagContainer}>
+                  {stageName ? (
+                    <View style={styles.stageTagBadge}>
+                      <Feather name="layers" size={12} color="#0369a1" />
+                      <Text style={styles.stageTagText}>Giai đoạn: {stageName}</Text>
+                    </View>
+                  ) : null}
+                  {planName ? (
+                    <View style={styles.planTagBadge}>
+                      <Feather name="book-open" size={12} color="#15803d" />
+                      <Text style={styles.planTagText}>{planName}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
               <View style={styles.rowBetween}>
                 <Text style={styles.cardTitle}>{valueOf(item.taskName, item.name, item.title, 'Công việc canh tác')}</Text>
                 <View style={[styles.badge, { backgroundColor: bg || '#dcfce7' }]}>
@@ -979,7 +1000,7 @@ export default function MyTasksScreen({ navigation, route }) {
                   </View>
                 ) : null}
               </View>
-            </View>
+            </TouchableOpacity>
           );
         }}
         ListEmptyComponent={
@@ -1265,6 +1286,44 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16,
     shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10, elevation: 2,
+  },
+  tagContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 10,
+  },
+  stageTagBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#e0f2fe',
+    borderColor: '#bae6fd',
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  stageTagText: {
+    color: '#0369a1',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  planTagBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  planTagText: {
+    color: '#15803d',
+    fontSize: 11,
+    fontWeight: '800',
   },
   planSubTag: { fontSize: 11, color: '#15803d', fontWeight: '600', marginBottom: 8 },
   rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 },

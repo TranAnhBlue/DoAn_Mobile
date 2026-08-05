@@ -2,6 +2,7 @@
   "expo": {
     "name": "EBookFarm",
     "slug": "ebookfarm-mobile",
+    "owner": "trananhblue",
     "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -43,7 +44,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "your-project-id"
+        "projectId": "980da3ad-6cfc-48a7-afa2-b2496475dfee"
       }
     }
   }
