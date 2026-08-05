@@ -27,6 +27,7 @@ import { offlineQueue } from '../../../shared/services/offlineQueue';
 import { syncAllPendingLogs } from '../../../shared/services/syncDailyLogs';
 import { sortLogsDescending } from '../../../shared/utils/format';
 import FieldCameraScreen from './FieldCameraScreen';
+import VoiceInputButton from '../../../shared/components/VoiceInputButton';
 
 const CATALOG_CACHE_KEY = {
   fertilizer: 'farm-leader:catalog-cache:fertilizer',
@@ -656,7 +657,18 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Nội dung thực hiện</Text>
             {task?.description ? <Text style={styles.taskDescription}>{task.description}</Text> : null}
-            <Text style={styles.label}>Chi tiết công việc <Text style={styles.required}>*</Text></Text>
+            <View style={styles.labelRow}>
+              <Text style={styles.label}>Chi tiết công việc <Text style={styles.required}>*</Text></Text>
+              <VoiceInputButton
+                disabled={saving}
+                onResult={(text) =>
+                  setDescription((prev) =>
+                    prev ? `${prev.trim()} ${text}` : text
+                  )
+                }
+                style={styles.voiceBtn}
+              />
+            </View>
             <TextInput
               style={[styles.input, styles.textarea]}
               value={description}
@@ -1004,7 +1016,9 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 12,
   },
-  label: { color: '#334155', fontSize: 13, fontWeight: '700', marginBottom: 8 },
+  label: { color: '#334155', fontSize: 13, fontWeight: '700', marginBottom: 0 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  voiceBtn: { marginRight: 2 },
   required: { color: '#dc2626' },
   input: {
     minHeight: 48,
