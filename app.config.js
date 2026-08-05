@@ -42,11 +42,19 @@ export default {
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Cho phép $(PRODUCT_NAME) sử dụng microphone để nhận dạng giọng nói.",
+          "speechRecognitionPermission": "Cho phép $(PRODUCT_NAME) nhận dạng giọng nói của bạn."
+        }
       ]
     ],
     extra: {
       apiUrl: process.env.VITE_API_URL || process.env.VITE_API_ROOT || 'https://api.eapls.io.vn/api',
       googleClientId: process.env.VITE_GOOGLE_CLIENT_ID,
+      googleSttApiKey: process.env.GOOGLE_STT_API_KEY || '',
       eas: {
         projectId: "980da3ad-6cfc-48a7-afa2-b2496475dfee"
       }
