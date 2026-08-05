@@ -113,8 +113,8 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
             }
           }
         }
-      } catch (err) {
-        console.log(`[TaskDetail] ${ep} ERR:`, err?.response?.status, err?.message);
+      } catch {
+        // ignore — thử endpoint tiếp theo
       }
     }
 
@@ -649,8 +649,8 @@ export default function MyTasksScreen({ navigation, route }) {
       try {
         const sumRes = await api.get('/cultivation-tasks/my-logbook-summaries');
         logbookSummaries = extractItems(sumRes.data);
-      } catch (errSum) {
-        console.log('[fetchTasks] /my-logbook-summaries err:', errSum?.message);
+      } catch {
+        // ignore — không có summary logbook
       }
 
       const myLogbookIdSet = new Set(
@@ -690,8 +690,7 @@ export default function MyTasksScreen({ navigation, route }) {
               if (lbId) t.logbookId = lbId;
             });
             return items;
-          } catch (errLb) {
-            console.log(`[fetchTasks] /logbook/${lbId} err:`, errLb?.message);
+          } catch {
             return [];
           }
         });
@@ -702,8 +701,8 @@ export default function MyTasksScreen({ navigation, route }) {
       try {
         const res = await api.get('/cultivation-tasks/my-tasks', { params: { PageIndex: 1, PageSize: 100 } });
         myTasksRaw = extractItems(res.data);
-      } catch (err) {
-        console.log('[fetchTasks] /my-tasks err:', err?.message);
+      } catch {
+        // ignore — không có my-tasks
       }
 
       const mergedMap = new Map();

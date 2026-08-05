@@ -1,116 +1,189 @@
-# 🌾 EAPLS Mobile App - Ứng Dụng Quản Lý Nhật Ký & Kế Hoạch Canh Tác Nông Nghiệp
+﻿# 🌾 EAPLS Mobile — Ứng Dụng Quản Lý Canh Tác Nông Nghiệp Thông Minh
 
-Ứng dụng di động **EAPLS Mobile** được phát triển bằng **React Native (Expo)** thuộc hệ thống Nông nghiệp Thông minh EAPLS. Ứng dụng hỗ trợ các vai trò chính trong trang trại bao gồm **Farm Leader (Trưởng nhóm)** và **Farm Supervisor (Giám sát viên)** thực hiện công tác quản lý kế hoạch canh tác, phân công nhân sự, ghi chép nhật ký sản xuất hàng ngày, chốt nhật ký giai đoạn và truy xuất nguồn gốc.
+> **EAPLS** *(Electronic Agriculture Planning & Logging System)* là hệ thống quản lý nông nghiệp điện tử tích hợp, hỗ trợ toàn bộ quy trình từ lập kế hoạch canh tác, phân công nhân sự, ghi nhật ký sản xuất hàng ngày đến truy xuất nguồn gốc sản phẩm.
+
+Ứng dụng di động được xây dựng bằng **React Native (Expo)**, phục vụ 2 vai trò chính: **Farm Leader (Trưởng nhóm sản xuất)** và **Farm Supervisor (Giám sát viên)**.
 
 ---
 
-## 🚀 Tính Năng Chính
+## ✨ Tính Năng Nổi Bật
 
-### 👨‍🌾 1. Vai trò Farm Leader (Trưởng Nhóm Sản Xuất)
-* **Quản Lý Công Việc (My Tasks):**
-  * Xem danh sách công việc được phân công theo từng giai đoạn và vùng trồng.
-  * Lọc công việc theo trạng thái (*Tất cả, Chưa thực hiện, Đang thực hiện, Hoàn thành*).
-  * Kích hoạt bắt đầu công việc.
-* **Ghi Nhật Ký Hàng Ngày (Daily Log):**
-  * Ghi lại chi tiết hoạt động sản xuất, mô tả công việc, vật tư sử dụng (phân bón, nông dược có tính diện tích $m^2$ và số lượng).
-  * Chụp và tải ảnh minh chứng thực địa từ camera / thư viện.
-  * Hỗ trợ lưu trữ và đồng bộ nhật ký ngoại tuyến (Offline Sync Queue) khi không có kết nối mạng.
-  * Sắp xếp lịch sử ghi nhật ký theo thứ tự thời gian mới nhất lên đầu.
+### 👨‍🌾 Farm Leader — Trưởng Nhóm Sản Xuất
 
-### 🕵️‍♂️ 2. Vai trò Farm Supervisor (Giám Sát Viên)
-* **Quản Lý Kế Hoạch & Sổ Nhật Ký (Cultivation Logbooks):**
-  * Xem danh sách kế hoạch canh tác theo từng quy trình sản xuất (Ví dụ: *Quy trình trồng Hồng Nam Đồng*, *Quy trình trồng Lúa*...).
-  * Phân loại kế hoạch theo trạng thái: *Tất cả, Đang thực hiện (Xanh dương), Chờ duyệt đóng (Cam), Hoàn thành (Xanh lá)*.
-  * Phân công Farm Leader và nông dân tham gia vào từng công việc.
-  * Tự động ẩn nút phân công đối với các công việc đã hoàn thành hoặc đã hủy.
-* **Theo Dõi Lịch Sử & Chốt Sổ Nhật Ký Giai Đoạn:**
-  * Xem toàn bộ lịch sử ghi log theo từng công việc/giai đoạn (người ghi, ngày ghi, vật tư, ảnh minh chứng có hỗ trợ xem phóng to toàn màn hình).
-  * **Biên soạn & Chốt sổ:** Tổng hợp bảng vật tư, ảnh thực địa, nhập mô tả văn phong chuẩn để lưu thành nhật ký chính thức của giai đoạn.
-  * Phê duyệt hoặc từ chối đóng kế hoạch canh tác khi hoàn tất thu hoạch.
-* **Quản Lý Vùng Trồng (Land Plots):**
-  * Xem chi tiết vùng trồng: Tên vùng, Diện tích ($m^2$), Địa chỉ, Trạng thái canh tác.
-  * Tích hợp theo dõi thời tiết thực thời (Nhiệt độ, độ ẩm, tốc độ gió) tại vùng trồng.
-* **Quản Lý Nhân Sự / Nông Dân (Farmers Management):**
-  * Danh sách Farm Leader & Nông dân trong trang trại.
-  * Tính toán và hiển thị chính xác số lượng công việc đang được giao cho từng nhân sự.
-  * Chi tiết thông tin nhân sự và danh sách công việc được phân công kèm trạng thái hiển thị chuẩn tiếng Việt (*Hoàn thành, Đang thực hiện, Chờ kích hoạt...*).
+| Tính năng | Mô tả |
+|---|---|
+| **Quản lý công việc** | Xem, lọc và kích hoạt công việc được phân công theo giai đoạn & vùng trồng |
+| **Ghi nhật ký hàng ngày** | Ghi chi tiết hoạt động, vật tư (phân bón, thuốc BVTV), diện tích áp dụng |
+| **Nhập giọng nói (Voice Input)** | Đọc nói → tự động điền vào ô mô tả công việc bằng Google Speech-to-Text |
+| **Chụp ảnh minh chứng** | Camera tích hợp GPS + timestamp, tối đa 3 ảnh/ghi chép |
+| **Offline Sync** | Lưu ghi chép offline khi mất mạng, tự đồng bộ khi có kết nối trở lại |
+| **Dashboard** | Tổng quan tiến độ công việc, thống kê theo giai đoạn |
 
-### 🔔 3. Tiện Ích Đã Tích Hợp
-* **Hệ Thống Thông Báo (Notifications):** Theo dõi thông báo công việc, lịch trình và cập nhật từ hệ thống.
-* **Truy Xuất Nguồn Gốc (Traceability):** Quét mã QR truy xuất thông tin sản phẩm và thửa đất canh tác.
-* **Đồng Bộ Dữ Liệu:** Tự động đồng bộ và lưu trữ offline mượt mà.
+### 🕵️ Farm Supervisor — Giám Sát Viên
+
+| Tính năng | Mô tả |
+|---|---|
+| **Quản lý kế hoạch canh tác** | Xem, tạo và theo dõi sổ nhật ký (Cultivation Logbooks) theo quy trình |
+| **Phân công nhân sự** | Giao Farm Leader & nông dân vào từng công việc cụ thể |
+| **Chốt nhật ký giai đoạn** | Tổng hợp vật tư, ảnh thực địa, biên soạn nhật ký chính thức |
+| **Phê duyệt kế hoạch** | Duyệt hoặc từ chối đóng kế hoạch canh tác sau thu hoạch |
+| **Quản lý vùng trồng** | Chi tiết diện tích, địa chỉ, thời tiết thực thời tại vùng trồng |
+| **Quản lý nhân sự** | Danh sách Farm Leader & nông dân, số lượng công việc đang giao |
+
+### 🔧 Tiện Ích Chung
+
+- **🔔 Thông báo** — Theo dõi cập nhật công việc, lịch trình từ hệ thống
+- **🔍 Truy xuất nguồn gốc** — Quét QR truy xuất thông tin sản phẩm & thửa đất
+- **📴 Chế độ offline** — Toàn bộ tính năng ghi chép hoạt động không cần mạng
 
 ---
 
 ## 🛠️ Công Nghệ Sử Dụng
 
-* **Core Framework:** React Native, Expo SDK
-* **Navigation:** React Navigation (Stack Navigator, Bottom Tab Navigator)
-* **State Management & Data Fetching:** `@tanstack/react-query`, `Zustand`
-* **Icons & Styling:** `@expo/vector-icons` (Feather), StyleSheet thuần UI/UX hiện đại
-* **HTTP Client:** Axios với cấu hình Interceptors tự động đính kèm Token và xử lý lỗi chuẩn API
-* **Local Storage:** `@react-native-async-storage/async-storage`
+| Nhóm | Thư viện / Công nghệ |
+|---|---|
+| **Core** | React Native 0.81, Expo SDK 54 |
+| **Navigation** | React Navigation 7 (Stack + Bottom Tab) |
+| **State & Data** | `@tanstack/react-query` v5, `Zustand` v5 |
+| **HTTP Client** | `Axios` với interceptors tự động gắn JWT token |
+| **Local Storage** | `@react-native-async-storage/async-storage` |
+| **UI & Icons** | `@expo/vector-icons` (Feather), StyleSheet native |
+| **Camera & Media** | `expo-camera`, `expo-image-picker`, `expo-image` |
+| **Audio / Voice** | `expo-av` — ghi âm microphone |
+| **Speech-to-Text** | Google Cloud Speech-to-Text REST API (vi-VN) |
+| **Location & GPS** | `expo-location` — tọa độ GPS tích hợp ảnh |
+| **File System** | `expo-file-system` |
+| **Charts** | `react-native-chart-kit`, `react-native-svg` |
+| **Animations** | `react-native-reanimated`, Animated API |
+| **Build** | EAS Build (Expo Application Services) |
 
 ---
 
-## 📁 Cấu Trúc Thư Mục Project
+## 📁 Cấu Trúc Thư Mục
 
-```text
+```
 DoAn_Mobile/
-├── App.js                         # File khởi tạo ứng dụng
-├── app.json                       # Cấu hình Expo App
-├── package.json                   # Danh sách thư viện & dependency
+├── App.js                          # Entry point ứng dụng
+├── index.js                        # Root register
+├── app.config.js                   # Cấu hình Expo (env, plugins, permissions)
+├── eas.json                        # Cấu hình EAS Build profiles
+├── .env                            # Biến môi trường (không commit lên git)
+│
 └── src/
-    ├── features/                  # Các module tính năng dùng chung
-    │   ├── auth/                  # Đăng nhập, phân quyền & lưu trạng thái tài khoản
-    │   ├── daily-log/             # Modal & camera ghi nhật ký hàng ngày
-    │   ├── land-plots/            # Danh sách & chi tiết vùng trồng
-    │   ├── notifications/         # Màn hình thông báo & chi tiết thông báo
-    │   ├── profile/               # Thông tin tài khoản & cài đặt
-    │   └── traceability/          # Quét QR & truy xuất nguồn gốc
-    ├── navigation/                # Điều hướng ứng dụng (Authenticated & Tab Navigators)
-    ├── roles/                     # Màn hình & API phân theo vai trò
-    │   ├── farm-leader/           # Giao diện & xử lý dành cho Farm Leader
-    │   └── farm-supervisor/       # Giao diện & API dành cho Farm Supervisor
-    └── shared/                    # Các tiện ích dùng chung
-        ├── api/                   # Axios client & xử lý response chuẩn
-        ├── services/              # Dịch vụ đồng bộ offline queue
-        └── utils/                 # Utilities làm tròn số, định dạng ngày tháng vi-VN, URL ảnh
+    ├── features/                   # Modules tính năng
+    │   ├── ai/                     # Trợ lý AI & gợi ý canh tác
+    │   ├── auth/                   # Đăng nhập, phân quyền, lưu token
+    │   ├── daily-log/              # Ghi nhật ký hàng ngày & camera thực địa
+    │   ├── dashboard/              # Màn hình tổng quan & thống kê
+    │   ├── inventory/              # Quản lý kho vật tư
+    │   ├── journals/               # Nhật ký sản xuất (xem lại)
+    │   ├── land-plots/             # Danh sách & chi tiết vùng trồng
+    │   ├── notifications/          # Thông báo hệ thống
+    │   ├── production/             # Quản lý quy trình sản xuất
+    │   ├── profile/                # Thông tin tài khoản & cài đặt
+    │   ├── purchases/              # Quản lý đơn mua vật tư
+    │   ├── reports/                # Báo cáo sản xuất
+    │   ├── summary-report/         # Báo cáo tổng hợp
+    │   └── traceability/           # Quét QR & truy xuất nguồn gốc
+    │
+    ├── navigation/                 # Điều hướng (Auth flow + Tab navigator)
+    │
+    ├── roles/                      # Màn hình phân theo vai trò
+    │   ├── farm-leader/            # UI & logic dành cho Farm Leader
+    │   └── farm-supervisor/        # UI & logic dành cho Farm Supervisor
+    │
+    └── shared/                     # Dùng chung toàn app
+        ├── api/                    # Axios client & helpers xử lý response
+        ├── components/             # Component dùng lại (VoiceInputButton, ...)
+        ├── hooks/                  # Custom hooks (useNetworkStatus, ...)
+        ├── screens/                # Màn hình chia sẻ
+        ├── services/               # Offline queue, sync service
+        └── utils/                  # Format ngày vi-VN, làm tròn số, URL ảnh
 ```
 
 ---
 
-## ⚙️ Hướng Dẫn Cài Đặt & Khởi Chạy
+## ⚙️ Cài Đặt & Khởi Chạy
 
-### 1. Yêu cầu hệ thống
-* Node.js ($\ge 18.x$)
-* npm hoặc yarn
-* Ứng dụng **Expo Go** trên thiết bị di động (Android / iOS) hoặc Emulator (Android Studio / Xcode)
+### Yêu cầu
+- **Node.js** >= 18.x
+- **npm** >= 9.x
+- Ứng dụng **Expo Go** trên điện thoại (Android / iOS)
 
-### 2. Cài đặt các thư viện (Dependencies)
-Mở terminal tại thư mục dự án và chạy lệnh:
+### 1. Cài dependencies
+
 ```bash
 npm install
 ```
 
-### 3. Khởi chạy ứng dụng Expo Dev Server
-Chạy lệnh khởi động Expo server với tùy chọn xóa cache:
+### 2. Cấu hình biến môi trường
+
+Tạo file `.env` ở thư mục gốc (hoặc chỉnh sửa file có sẵn):
+
+```env
+# Backend API
+VITE_API_ROOT=https://api.eapls.io.vn/api
+VITE_API_URL=https://api.eapls.io.vn/api
+
+# Google OAuth
+VITE_GOOGLE_CLIENT_ID=your_google_client_id
+
+# Google Speech-to-Text (lấy tại console.cloud.google.com — miễn phí 60 phút/tháng)
+GOOGLE_STT_API_KEY=your_google_stt_api_key
+```
+
+### 3. Khởi chạy dev server
+
 ```bash
 npx expo start -c
 ```
 
-* Quét mã **QR Code** hiển thị trên terminal bằng ứng dụng **Expo Go** trên điện thoại để trải nghiệm trực tiếp.
-* Nhấn `a` để mở trên Android Emulator, hoặc `w` để chạy thử trên Web browser.
+Quét **QR Code** bằng Expo Go để chạy trên thiết bị thật.
 
 ---
 
-## 🔒 Thông Tin Tài Khoản Mẫu Trải Nghiệm (Staging/Production API)
+## 📦 Build APK (Android)
 
-* **API Swagger Endpoint:** `https://api.eapls.io.vn/swagger/index.html`
-* **Tài khoản Farm Supervisor:** `farmsupervisor_account1@eapls.com`
-* **Mật khẩu:** `Abc@1234`
+Dự án dùng **EAS Build** — build trên cloud, không cần Android Studio:
+
+```bash
+# Cài EAS CLI (1 lần)
+npm install -g eas-cli
+
+# Đăng nhập tài khoản Expo
+eas login
+
+# Build APK (profile preview)
+eas build -p android --profile preview
+```
+
+Build xong (~5–10 phút) nhận link tải APK trực tiếp từ Expo.
 
 ---
 
-## 📜 Giấy Phép (License)
-Dự án được bảo hộ thuộc Đồ án Hệ thống Quản lý Nông nghiệp Điện tử **EAPLS**.
+## 🎙️ Tính Năng Nhập Giọng Nói
+
+Tính năng **Voice Input** trong màn hình *Ghi chép công việc* hoạt động trên **Expo Go** (không cần build native):
+
+1. Nhấn nút 🎙️ cạnh label "Chi tiết công việc"
+2. Nói nội dung công việc
+3. Nhấn lại để dừng → transcript tự điền vào ô text
+
+> **Yêu cầu:** `GOOGLE_STT_API_KEY` hợp lệ trong `.env` và API **Cloud Speech-to-Text** đã được kích hoạt tại [console.cloud.google.com](https://console.cloud.google.com).
+
+---
+
+## 🔑 Tài Khoản Demo
+
+| Thông tin | Giá trị |
+|---|---|
+| **API & Swagger** | https://api.eapls.io.vn/swagger/index.html |
+| **Farm Supervisor** | `farmsupervisor_account1@eapls.com` |
+| **Mật khẩu** | `Abc@1234` |
+
+---
+
+## 📜 Giấy Phép
+
+Dự án thuộc Đồ án Tốt nghiệp — Hệ thống Quản lý Nông nghiệp Điện tử **EAPLS**.  
+Bảo lưu toàn bộ quyền sở hữu trí tuệ.

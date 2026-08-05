@@ -233,8 +233,6 @@ export default function VoiceInputButton({ onResult, disabled = false, style }) 
   // Không render trên web
   if (Platform.OS === 'web') return null;
 
-  const isActive = isRecording || isProcessing;
-  void isActive; // unused — kept for potential future use
 
   return (
     <View style={[styles.wrapper, style]}>
