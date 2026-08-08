@@ -14,19 +14,18 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuthStore } from '../../../features/auth/store/authStore';
 import DailyLogModal from '../../../features/daily-log/components/DailyLogModal';
 import SummaryReportModal from '../../../features/summary-report/components/SummaryReportModal';
-import { extractLogMaterials } from '../../../features/summary-report/utils/aggregateMaterials';
-import { useAuthStore } from '../../../features/auth/store/authStore';
 import api from '../../../shared/api/client';
 import { extractItems, getEntityId } from '../../../shared/api/response';
 import { offlineQueue } from '../../../shared/services/offlineQueue';
 import { normalizeStatus, STATUS, valueOf } from '../../../shared/utils/data';
-import { dateOf, dateTimeOf, formatDateVN, formatNumber, resolveAvatarUrl, sortLogsDescending } from '../../../shared/utils/format';
+import { dateOf, dateTimeOf, formatNumber, resolveAvatarUrl, sortLogsDescending } from '../../../shared/utils/format';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DetailCell component
@@ -128,7 +127,7 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
           return !itemTaskId || itemTaskId === String(taskId);
         });
       }
-    } catch {}
+    } catch { }
 
     let offlineLogs = [];
     try {
@@ -137,12 +136,12 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
         const itemTaskId = String(item.cultivationTaskId || item.taskId || getEntityId(item.task) || '');
         return !itemTaskId || itemTaskId === String(taskId);
       });
-    } catch {}
+    } catch { }
 
     let finalHistory = [];
     if (found && found.length > 0) {
       finalHistory = found;
-      AsyncStorage.removeItem(`farm-leader:sent-logs-history:${taskId}`).catch(() => {});
+      AsyncStorage.removeItem(`farm-leader:sent-logs-history:${taskId}`).catch(() => { });
     } else {
       const combinedList = [];
       const seenIds = new Set();
@@ -317,767 +316,314 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
               ) : null}
             </View>
 
-          {/* Info cards */}
-          {(planName || stageName) ? (
-            <View style={ds.infoRow}>
-              {planName ? (
-                <View style={ds.infoCard}>
-                  <Text style={ds.infoCardLabel}>Kế hoạch canh tác</Text>
-                  <Text style={ds.infoCardValue}>{planName}</Text>
-                </View>
-              ) : null}
-              {stageName ? (
-                <View style={ds.infoCard}>
-                  <Text style={ds.infoCardLabel}>Giai đoạn</Text>
-                  <Text style={ds.infoCardValue}>{stageName}</Text>
-                </View>
-              ) : null}
-            </View>
-          ) : null}
-
-          {/* Detail grid */}
-          <View style={ds.detailGrid}>
-            <DetailCell icon="calendar" label="Ngày bắt đầu" value={startDate} />
-            <DetailCell icon="clock" label="Ngày kết thúc" value={endDate} />
-            <DetailCell icon="map-pin" label="Vùng trồng" value={location} />
-            <DetailCell icon="users" label="Thành viên" value={`${memberCount} người`} />
-          </View>
-
-          {/* Assignees list */}
-          {assignees.length > 0 ? (
-            <View style={ds.section}>
-              <Text style={ds.sectionTitle}>Thành viên nhóm</Text>
-              <View style={ds.assigneeList}>
-                {assignees.map((a, idx) => {
-                  const name = valueOf(a.fullName, a.name, a.userName, 'Thành viên');
-                  const initial = (name || '?')[0].toUpperCase();
-                  const isLeader = a.role === 'FARM_LEADER' || a.isLeader;
-                  return (
-                    <View key={idx} style={ds.assigneeRow}>
-                      {a.avatarUrl ? (
-                        <Image source={{ uri: a.avatarUrl }} style={ds.avatarImage} />
-                      ) : (
-                        <View style={[ds.avatar, isLeader && ds.avatarLeader]}>
-                          <Text style={ds.avatarText}>{initial}</Text>
-                        </View>
-                      )}
-                      <View style={{ flex: 1 }}>
-                        <Text style={ds.assigneeName}>{name}</Text>
-                        {a.role ? <Text style={ds.assigneeRole}>{a.role}</Text> : null}
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-          ) : null}
-
-          {/* Tab bar */}
-          <View style={ds.tabBar}>
-            <TouchableOpacity
-              style={[ds.tab, activeTab === 'log' && ds.tabActive]}
-              onPress={() => setActiveTab('log')}
-            >
-              <Feather name="edit-3" size={14} color={activeTab === 'log' ? '#15803d' : '#94a3b8'} />
-              <Text style={[ds.tabText, activeTab === 'log' && ds.tabTextActive]}>Nội dung thực hiện</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[ds.tab, activeTab === 'history' && ds.tabActive]}
-              onPress={() => { setActiveTab('history'); fetchHistory(); }}
-            >
-              <Feather name="list" size={14} color={activeTab === 'history' ? '#15803d' : '#94a3b8'} />
-              <Text style={[ds.tabText, activeTab === 'history' && ds.tabTextActive]}>
-                Lịch sử{history.length > 0 ? ` (${history.length})` : ''}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Tab: Nội dung thực hiện */}
-          {activeTab === 'log' ? (
-            <View style={ds.tabContent}>
-              <View style={ds.inlineForm}>
-                <View style={ds.formRow}>
-                  <View style={ds.formHalf}>
-                    <Text style={ds.formLabel}><Text style={{ color: '#ef4444' }}>*</Text> Ngày ghi nhận</Text>
-                    <View style={ds.dateDisplayBox}>
-                      <Text style={ds.dateDisplayText}>{new Date().toLocaleDateString('vi-VN')}</Text>
-                      <Feather name="calendar" size={15} color="#94a3b8" />
-                    </View>
+            {/* Info cards */}
+            {(planName || stageName) ? (
+              <View style={ds.infoRow}>
+                {planName ? (
+                  <View style={ds.infoCard}>
+                    <Text style={ds.infoCardLabel}>Kế hoạch canh tác</Text>
+                    <Text style={ds.infoCardValue}>{planName}</Text>
                   </View>
-                  <View style={ds.formHalf}>
-                    <Text style={ds.formLabel}>Ảnh minh chứng</Text>
-                    <TouchableOpacity
-                      style={ds.photoBox}
-                      disabled={!canWriteLog}
-                      onPress={() => { onClose(); setTimeout(() => onRefreshParent?.('openLog', task), 250); }}
-                    >
-                      <Text style={ds.photoBoxText}>Chưa có ảnh</Text>
-                    </TouchableOpacity>
+                ) : null}
+                {stageName ? (
+                  <View style={ds.infoCard}>
+                    <Text style={ds.infoCardLabel}>Giai đoạn</Text>
+                    <Text style={ds.infoCardValue}>{stageName}</Text>
                   </View>
-                </View>
-
-                <Text style={ds.formLabel}><Text style={{ color: '#ef4444' }}>*</Text> Chi tiết công việc</Text>
-                <TextInput
-                  style={[ds.formTextarea, !canWriteLog && ds.formTextareaDisabled]}
-                  value={logDesc}
-                  onChangeText={setLogDesc}
-                  editable={canWriteLog}
-                  placeholder="Mô tả tình hình cây trồng, vấn đề phát sinh..."
-                  placeholderTextColor="#94a3b8"
-                  multiline
-                  textAlignVertical="top"
-                  numberOfLines={4}
-                />
-
-                <View style={ds.formSectionHeader}>
-                  <Text style={ds.formSectionTitle}>Phân bón</Text>
-                  {canWriteLog && (
-                    <TouchableOpacity
-                      style={ds.addMaterialBtn}
-                      onPress={() => { onClose(); setTimeout(() => onRefreshParent?.('openLog', task), 250); }}
-                    >
-                      <Feather name="plus" size={13} color="#15803d" />
-                      <Text style={ds.addMaterialBtnText}>Thêm</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-                <View style={ds.emptyMaterial}>
-                  <Text style={ds.emptyMaterialText}>Chưa có phân bón nào</Text>
-                </View>
-
-                <View style={ds.formSectionHeader}>
-                  <Text style={ds.formSectionTitle}>Nông dược</Text>
-                  {canWriteLog && (
-                    <TouchableOpacity
-                      style={ds.addMaterialBtn}
-                      onPress={() => { onClose(); setTimeout(() => onRefreshParent?.('openLog', task), 250); }}
-                    >
-                      <Feather name="plus" size={13} color="#15803d" />
-                      <Text style={ds.addMaterialBtnText}>Thêm</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-                <View style={ds.emptyMaterial}>
-                  <Text style={ds.emptyMaterialText}>Chưa có nông dược nào</Text>
-                </View>
-
-                {canWriteLog ? (
-                  <>
-                    <TouchableOpacity style={ds.submitLogBtn} onPress={submitInlineLog} disabled={logSaving}>
-                      {logSaving
-                        ? <ActivityIndicator color="#fff" />
-                        : <><Feather name="send" size={15} color="#fff" /><Text style={ds.submitLogBtnText}>Lưu ghi chép</Text></>
-                      }
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={ds.fullFormLink}
-                      onPress={() => { onClose(); setTimeout(() => onRefreshParent?.('openLog', task), 250); }}
-                    >
-                      <Feather name="external-link" size={13} color="#64748b" />
-                      <Text style={ds.fullFormLinkText}>Mở form đầy đủ (ảnh, phân bón, nông dược...)</Text>
-                    </TouchableOpacity>
-                  </>
                 ) : null}
               </View>
+            ) : null}
+
+            {/* Detail grid */}
+            <View style={ds.detailGrid}>
+              <DetailCell icon="calendar" label="Ngày bắt đầu" value={startDate} />
+              <DetailCell icon="clock" label="Ngày kết thúc" value={endDate} />
+              <DetailCell icon="map-pin" label="Vùng trồng" value={location} />
+              <DetailCell icon="users" label="Thành viên" value={`${memberCount} người`} />
             </View>
-          ) : null}
 
-          {/* Tab: Lịch sử ghi chép */}
-          {activeTab === 'history' ? (
-            <View style={ds.tabContent}>
-              {loadingHistory ? (
-                <View style={ds.historyLoading}>
-                  <ActivityIndicator color="#15803d" />
-                  <Text style={ds.loadingText}>Đang tải lịch sử...</Text>
-                </View>
-              ) : history.length === 0 ? (
-                <View style={ds.emptyTabContent}>
-                  <Feather name="inbox" size={36} color="#cbd5e1" />
-                  <Text style={ds.emptyTabText}>Chưa có bản ghi nào</Text>
-                </View>
-              ) : (
-                <View style={ds.historyList}>
-                  <Text style={ds.historyCount}>{history.length} bản ghi</Text>
-                  {history.map((item, idx) => {
-                    const logDate = valueOf(item.createdAt, item.activityDate, item.logDate, item.performedAt, item.date);
-                    const logDescText = valueOf(item.description, item.content, item.notes);
-                    const updatedBy = valueOf(
-                      item.createdByName,
-                      item.updatedByName,
-                      item.authorName,
-                      item.userName,
-                      item.user?.fullName,
-                      currentUser?.fullName,
-                      d.assignedLeaderName,
-                      assignees[0]?.fullName,
-                      'Nông dân'
-                    );
-                    const hasFert = item.fertilizers?.length > 0;
-                    const hasPest = item.pesticides?.length > 0;
+            {/* Assignees list */}
+            {assignees.length > 0 ? (
+              <View style={ds.section}>
+                <Text style={ds.sectionTitle}>Thành viên nhóm</Text>
+                <View style={ds.assigneeList}>
+                  {assignees.map((a, idx) => {
+                    const name = valueOf(a.fullName, a.name, a.userName, 'Thành viên');
+                    const initial = (name || '?')[0].toUpperCase();
+                    const isLeader = a.role === 'FARM_LEADER' || a.isLeader;
                     return (
-                      <View key={idx} style={ds.historyItem}>
-                        <View style={ds.historyDot} />
-                        <View style={ds.historyBody}>
-                          <Text style={ds.historyDate}>{dateTimeOf(logDate)}</Text>
-                          <Text style={ds.historyUpdatedBy}>Cập nhật bởi: {updatedBy}</Text>
-                          {logDescText ? <Text style={ds.historyDesc}>{logDescText}</Text> : null}
-                          {hasFert ? (
-                            <View style={ds.historyMaterialBoxGreen}>
-                              <Text style={ds.historyMaterialTitleGreen}>Phân bón</Text>
-                              <View style={ds.historyMaterialContentGreen}>
-                                <View style={ds.historyMaterialHeaderRow}>
-                                  <Feather name="droplet" size={12} color="#15803d" />
-                                  <Text style={ds.historyMaterialLabelGreen}>Phân bón đã sử dụng:</Text>
-                                </View>
-                                {item.fertilizers.map((f, fIdx) => (
-                                  <Text key={fIdx} style={ds.historyMaterialItemGreen}>
-                                    • <Text style={{ fontWeight: '700', color: '#1e293b' }}>{valueOf(f.name, f.fertilizerName, 'Phân bón')}</Text>: <Text style={{ color: '#15803d', fontWeight: '800' }}>{formatNumber(f.quantity || f.amount || 1)} {valueOf(f.unit, 'kg')}</Text>{(f.area || f.totalArea) ? ` (${formatNumber(f.area || f.totalArea)} m²)` : ''}
-                                  </Text>
-                                ))}
-                              </View>
-                            </View>
-                          ) : null}
-
-                          {hasPest ? (
-                            <View style={ds.historyMaterialBoxPurple}>
-                              <Text style={ds.historyMaterialTitlePurple}>Thuốc</Text>
-                              <View style={ds.historyMaterialContentPurple}>
-                                <View style={ds.historyMaterialHeaderRow}>
-                                  <Feather name="shield" size={12} color="#9333ea" />
-                                  <Text style={ds.historyMaterialLabelPurple}>Nông dược đã sử dụng:</Text>
-                                </View>
-                                {item.pesticides.map((p, pIdx) => (
-                                  <Text key={pIdx} style={ds.historyMaterialItemPurple}>
-                                    • <Text style={{ fontWeight: '700', color: '#1e293b' }}>{valueOf(p.name, p.pesticideName, 'Thuốc')}</Text>: <Text style={{ color: '#9333ea', fontWeight: '800' }}>{p.quantity || p.amount || 1} {valueOf(p.unit, 'lít')}</Text>{(p.area || p.totalArea) ? ` (${p.area || p.totalArea} m²)` : ''}
-                                  </Text>
-                                ))}
-                              </View>
-                            </View>
-                          ) : null}
-                          {(() => {
-                            const rawImgs = Array.isArray(item.images) ? item.images :
-                              Array.isArray(item.photoUrls) ? item.photoUrls :
-                                Array.isArray(item.photos) ? item.photos :
-                                  Array.isArray(item.imageUrls) ? item.imageUrls :
-                                    (item.imageUrl || item.photo || item.image) ? [item.imageUrl || item.photo || item.image] : [];
-                            const imgUrls = rawImgs.map((img) => {
-                              if (!img) return null;
-                              if (typeof img === 'string') return resolveAvatarUrl(img);
-                              return resolveAvatarUrl(valueOf(img.url, img.imageUrl, img.path, img.photoUrl, img.src));
-                            }).filter(Boolean);
-
-                            if (imgUrls.length === 0) return null;
-                            return (
-                              <View style={ds.historyImageGallery}>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ds.historyImageScroll}>
-                                  {imgUrls.map((url, imgIdx) => (
-                                    <TouchableOpacity
-                                      key={imgIdx}
-                                      activeOpacity={0.85}
-                                      onPress={() => setPreviewImage(url)}
-                                    >
-                                      <Image source={{ uri: url }} style={ds.historyThumbImage} resizeMode="cover" />
-                                    </TouchableOpacity>
-                                  ))}
-                                </ScrollView>
-                              </View>
-                            );
-                          })()}
+                      <View key={idx} style={ds.assigneeRow}>
+                        {a.avatarUrl ? (
+                          <Image source={{ uri: a.avatarUrl }} style={ds.avatarImage} />
+                        ) : (
+                          <View style={[ds.avatar, isLeader && ds.avatarLeader]}>
+                            <Text style={ds.avatarText}>{initial}</Text>
+                          </View>
+                        )}
+                        <View style={{ flex: 1 }}>
+                          <Text style={ds.assigneeName}>{name}</Text>
+                          {a.role ? <Text style={ds.assigneeRole}>{a.role}</Text> : null}
                         </View>
                       </View>
                     );
                   })}
                 </View>
-              )}
+              </View>
+            ) : null}
+
+            {/* Tab bar */}
+            <View style={ds.tabBar}>
+              <TouchableOpacity
+                style={[ds.tab, activeTab === 'log' && ds.tabActive]}
+                onPress={() => setActiveTab('log')}
+              >
+                <Feather name="edit-3" size={14} color={activeTab === 'log' ? '#15803d' : '#94a3b8'} />
+                <Text style={[ds.tabText, activeTab === 'log' && ds.tabTextActive]}>Nội dung thực hiện</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[ds.tab, activeTab === 'history' && ds.tabActive]}
+                onPress={() => { setActiveTab('history'); fetchHistory(); }}
+              >
+                <Feather name="list" size={14} color={activeTab === 'history' ? '#15803d' : '#94a3b8'} />
+                <Text style={[ds.tabText, activeTab === 'history' && ds.tabTextActive]}>
+                  Lịch sử{history.length > 0 ? ` (${history.length})` : ''}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Tab: Nội dung thực hiện */}
+            {activeTab === 'log' ? (
+              <View style={ds.tabContent}>
+                <View style={ds.inlineForm}>
+                  <View style={ds.formRow}>
+                    <View style={ds.formHalf}>
+                      <Text style={ds.formLabel}><Text style={{ color: '#ef4444' }}>*</Text> Ngày ghi nhận</Text>
+                      <View style={ds.dateDisplayBox}>
+                        <Text style={ds.dateDisplayText}>{new Date().toLocaleDateString('vi-VN')}</Text>
+                        <Feather name="calendar" size={15} color="#94a3b8" />
+                      </View>
+                    </View>
+                    <View style={ds.formHalf}>
+                      <Text style={ds.formLabel}>Ảnh minh chứng</Text>
+                      <TouchableOpacity
+                        style={ds.photoBox}
+                        disabled={!canWriteLog}
+                        onPress={() => { onClose(); setTimeout(() => onRefreshParent?.('openLog', task), 250); }}
+                      >
+                        <Text style={ds.photoBoxText}>Chưa có ảnh</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <Text style={ds.formLabel}><Text style={{ color: '#ef4444' }}>*</Text> Chi tiết công việc</Text>
+                  <TextInput
+                    style={[ds.formTextarea, !canWriteLog && ds.formTextareaDisabled]}
+                    value={logDesc}
+                    onChangeText={setLogDesc}
+                    editable={canWriteLog}
+                    placeholder="Mô tả tình hình cây trồng, vấn đề phát sinh..."
+                    placeholderTextColor="#94a3b8"
+                    multiline
+                    textAlignVertical="top"
+                    numberOfLines={4}
+                  />
+
+                  <View style={ds.formSectionHeader}>
+                    <Text style={ds.formSectionTitle}>Phân bón</Text>
+                    {canWriteLog && (
+                      <TouchableOpacity
+                        style={ds.addMaterialBtn}
+                        onPress={() => { onClose(); setTimeout(() => onRefreshParent?.('openLog', task), 250); }}
+                      >
+                        <Feather name="plus" size={13} color="#15803d" />
+                        <Text style={ds.addMaterialBtnText}>Thêm</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <View style={ds.emptyMaterial}>
+                    <Text style={ds.emptyMaterialText}>Chưa có phân bón nào</Text>
+                  </View>
+
+                  <View style={ds.formSectionHeader}>
+                    <Text style={ds.formSectionTitle}>Nông dược</Text>
+                    {canWriteLog && (
+                      <TouchableOpacity
+                        style={ds.addMaterialBtn}
+                        onPress={() => { onClose(); setTimeout(() => onRefreshParent?.('openLog', task), 250); }}
+                      >
+                        <Feather name="plus" size={13} color="#15803d" />
+                        <Text style={ds.addMaterialBtnText}>Thêm</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <View style={ds.emptyMaterial}>
+                    <Text style={ds.emptyMaterialText}>Chưa có nông dược nào</Text>
+                  </View>
+
+                  {canWriteLog ? (
+                    <>
+                      <TouchableOpacity style={ds.submitLogBtn} onPress={submitInlineLog} disabled={logSaving}>
+                        {logSaving
+                          ? <ActivityIndicator color="#fff" />
+                          : <><Feather name="send" size={15} color="#fff" /><Text style={ds.submitLogBtnText}>Lưu ghi chép</Text></>
+                        }
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={ds.fullFormLink}
+                        onPress={() => { onClose(); setTimeout(() => onRefreshParent?.('openLog', task), 250); }}
+                      >
+                        <Feather name="external-link" size={13} color="#64748b" />
+                        <Text style={ds.fullFormLinkText}>Mở form đầy đủ (ảnh, phân bón, nông dược...)</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+
+            {/* Tab: Lịch sử ghi chép */}
+            {activeTab === 'history' ? (
+              <View style={ds.tabContent}>
+                {loadingHistory ? (
+                  <View style={ds.historyLoading}>
+                    <ActivityIndicator color="#15803d" />
+                    <Text style={ds.loadingText}>Đang tải lịch sử...</Text>
+                  </View>
+                ) : history.length === 0 ? (
+                  <View style={ds.emptyTabContent}>
+                    <Feather name="inbox" size={36} color="#cbd5e1" />
+                    <Text style={ds.emptyTabText}>Chưa có bản ghi nào</Text>
+                  </View>
+                ) : (
+                  <View style={ds.historyList}>
+                    <Text style={ds.historyCount}>{history.length} bản ghi</Text>
+                    {history.map((item, idx) => {
+                      const logDate = valueOf(item.createdAt, item.activityDate, item.logDate, item.performedAt, item.date);
+                      const logDescText = valueOf(item.description, item.content, item.notes);
+                      const updatedBy = valueOf(
+                        item.createdByName,
+                        item.updatedByName,
+                        item.authorName,
+                        item.userName,
+                        item.user?.fullName,
+                        currentUser?.fullName,
+                        d.assignedLeaderName,
+                        assignees[0]?.fullName,
+                        'Nông dân'
+                      );
+                      const hasFert = item.fertilizers?.length > 0;
+                      const hasPest = item.pesticides?.length > 0;
+                      return (
+                        <View key={idx} style={ds.historyItem}>
+                          <View style={ds.historyDot} />
+                          <View style={ds.historyBody}>
+                            <Text style={ds.historyDate}>{dateTimeOf(logDate)}</Text>
+                            <Text style={ds.historyUpdatedBy}>Cập nhật bởi: {updatedBy}</Text>
+                            {logDescText ? <Text style={ds.historyDesc}>{logDescText}</Text> : null}
+                            {hasFert ? (
+                              <View style={ds.historyMaterialBoxGreen}>
+                                <Text style={ds.historyMaterialTitleGreen}>Phân bón</Text>
+                                <View style={ds.historyMaterialContentGreen}>
+                                  <View style={ds.historyMaterialHeaderRow}>
+                                    <Feather name="droplet" size={12} color="#15803d" />
+                                    <Text style={ds.historyMaterialLabelGreen}>Phân bón đã sử dụng:</Text>
+                                  </View>
+                                  {item.fertilizers.map((f, fIdx) => (
+                                    <Text key={fIdx} style={ds.historyMaterialItemGreen}>
+                                      • <Text style={{ fontWeight: '700', color: '#1e293b' }}>{valueOf(f.name, f.fertilizerName, 'Phân bón')}</Text>: <Text style={{ color: '#15803d', fontWeight: '800' }}>{formatNumber(f.quantity || f.amount || 1)} {valueOf(f.unit, 'kg')}</Text>{(f.area || f.totalArea) ? ` (${formatNumber(f.area || f.totalArea)} m²)` : ''}
+                                    </Text>
+                                  ))}
+                                </View>
+                              </View>
+                            ) : null}
+
+                            {hasPest ? (
+                              <View style={ds.historyMaterialBoxPurple}>
+                                <Text style={ds.historyMaterialTitlePurple}>Thuốc</Text>
+                                <View style={ds.historyMaterialContentPurple}>
+                                  <View style={ds.historyMaterialHeaderRow}>
+                                    <Feather name="shield" size={12} color="#9333ea" />
+                                    <Text style={ds.historyMaterialLabelPurple}>Nông dược đã sử dụng:</Text>
+                                  </View>
+                                  {item.pesticides.map((p, pIdx) => (
+                                    <Text key={pIdx} style={ds.historyMaterialItemPurple}>
+                                      • <Text style={{ fontWeight: '700', color: '#1e293b' }}>{valueOf(p.name, p.pesticideName, 'Thuốc')}</Text>: <Text style={{ color: '#9333ea', fontWeight: '800' }}>{p.quantity || p.amount || 1} {valueOf(p.unit, 'lít')}</Text>{(p.area || p.totalArea) ? ` (${p.area || p.totalArea} m²)` : ''}
+                                    </Text>
+                                  ))}
+                                </View>
+                              </View>
+                            ) : null}
+                            {(() => {
+                              const rawImgs = Array.isArray(item.images) ? item.images :
+                                Array.isArray(item.photoUrls) ? item.photoUrls :
+                                  Array.isArray(item.photos) ? item.photos :
+                                    Array.isArray(item.imageUrls) ? item.imageUrls :
+                                      (item.imageUrl || item.photo || item.image) ? [item.imageUrl || item.photo || item.image] : [];
+                              const imgUrls = rawImgs.map((img) => {
+                                if (!img) return null;
+                                if (typeof img === 'string') return resolveAvatarUrl(img);
+                                return resolveAvatarUrl(valueOf(img.url, img.imageUrl, img.path, img.photoUrl, img.src));
+                              }).filter(Boolean);
+
+                              if (imgUrls.length === 0) return null;
+                              return (
+                                <View style={ds.historyImageGallery}>
+                                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ds.historyImageScroll}>
+                                    {imgUrls.map((url, imgIdx) => (
+                                      <TouchableOpacity
+                                        key={imgIdx}
+                                        activeOpacity={0.85}
+                                        onPress={() => setPreviewImage(url)}
+                                      >
+                                        <Image source={{ uri: url }} style={ds.historyThumbImage} resizeMode="cover" />
+                                      </TouchableOpacity>
+                                    ))}
+                                  </ScrollView>
+                                </View>
+                              );
+                            })()}
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            ) : null}
+
+            <Modal visible={Boolean(previewImage)} transparent animationType="fade" onRequestClose={() => setPreviewImage(null)}>
+              <TouchableOpacity style={ds.imagePreviewBackdrop} activeOpacity={1} onPress={() => setPreviewImage(null)}>
+                <TouchableOpacity style={ds.closePreviewBtn} onPress={() => setPreviewImage(null)}>
+                  <Feather name="x" size={24} color="#fff" />
+                </TouchableOpacity>
+                {previewImage ? (
+                  <Image source={{ uri: previewImage }} style={ds.fullPreviewImage} resizeMode="contain" />
+                ) : null}
+              </TouchableOpacity>
+            </Modal>
+
+            <View style={{ height: canWriteLog ? 80 : 40 }} />
+          </ScrollView>
+          {canWriteLog ? (
+            <View style={ds.bottomStickyBar}>
+              <TouchableOpacity style={ds.bottomSummaryBtn} onPress={() => setSummaryModalVisible(true)}>
+                <Feather name="check-circle" size={17} color="#fff" />
+                <Text style={ds.bottomSummaryBtnText}>Hoàn thành & Gửi Summary</Text>
+              </TouchableOpacity>
             </View>
           ) : null}
-
-          <Modal visible={Boolean(previewImage)} transparent animationType="fade" onRequestClose={() => setPreviewImage(null)}>
-            <TouchableOpacity style={ds.imagePreviewBackdrop} activeOpacity={1} onPress={() => setPreviewImage(null)}>
-              <TouchableOpacity style={ds.closePreviewBtn} onPress={() => setPreviewImage(null)}>
-                <Feather name="x" size={24} color="#fff" />
-              </TouchableOpacity>
-              {previewImage ? (
-                <Image source={{ uri: previewImage }} style={ds.fullPreviewImage} resizeMode="contain" />
-              ) : null}
-            </TouchableOpacity>
-          </Modal>
-
-          <View style={{ height: canWriteLog ? 80 : 40 }} />
-        </ScrollView>
-        {canWriteLog ? (
-          <View style={ds.bottomStickyBar}>
-            <TouchableOpacity style={ds.bottomSummaryBtn} onPress={() => setSummaryModalVisible(true)}>
-              <Feather name="check-circle" size={17} color="#fff" />
-              <Text style={ds.bottomSummaryBtnText}>Hoàn thành & Gửi Summary</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-      </View>
-    )}
-  </View>
-);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Main Screen
-// ─────────────────────────────────────────────────────────────────────────────
-export default function MyTasksScreen({ navigation, route }) {
-  const currentUser = useAuthStore((state) => state.user);
-  const currentUserAvatar = resolveAvatarUrl(currentUser?.avatarUrl || currentUser?.avatar);
-
-  const [tasks, setTasks] = useState([]);
-  const [filter, setFilter] = useState('ALL');
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [dailyLogVisible, setDailyLogVisible] = useState(false);
-  const [entryMode, setEntryMode] = useState('daily');
-  const [description, setDescription] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [detailTask, setDetailTask] = useState(null);
-
-  const fetchTasks = useCallback(async () => {
-    setError('');
-    try {
-      let myTasksRaw = [];
-      let logbookSummaries = [];
-      let logbookTasks = [];
-
-      try {
-        const sumRes = await api.get('/cultivation-tasks/my-logbook-summaries');
-        logbookSummaries = extractItems(sumRes.data);
-      } catch {
-        // ignore — không có summary logbook
-      }
-
-      const myLogbookIdSet = new Set(
-        logbookSummaries
-          .map((lb) => String(getEntityId(lb) || lb.id || lb.logbookId || ''))
-          .filter(Boolean)
-      );
-      const myLogbookNameSet = new Set(
-        logbookSummaries
-          .map((lb) => valueOf(lb.name, lb.title, lb.logbookName, lb.planName))
-          .filter(Boolean)
-      );
-
-      if (myLogbookIdSet.size > 0) {
-        const taskPromises = Array.from(myLogbookIdSet).map(async (lbId) => {
-          const lbObj = logbookSummaries.find((l) => String(getEntityId(l) || l.id || l.logbookId || '') === lbId);
-          const lbName = valueOf(lbObj?.name, lbObj?.title, lbObj?.logbookName, lbObj?.planName);
-          try {
-            const lbRes = await api.get(`/cultivation-tasks/logbook/${lbId}`);
-            const rawBody = lbRes.data;
-            const lbData = rawBody?.data ?? rawBody ?? {};
-            let items = extractItems(lbData);
-            if ((!items || items.length === 0) && lbData?.stages) {
-              items = [];
-              lbData.stages.forEach((stg) => {
-                const stgTasks = stg.tasks || stg.cultivationTasks || [];
-                stgTasks.forEach((t) => {
-                  t.stageName = stg.name;
-                  t.planName = lbName;
-                  t.logbookId = lbId;
-                  items.push(t);
-                });
-              });
-            }
-            items.forEach((t) => {
-              if (lbName) t.planName = lbName;
-              if (lbId) t.logbookId = lbId;
-            });
-            return items;
-          } catch {
-            return [];
-          }
-        });
-        const results = await Promise.all(taskPromises);
-        logbookTasks = results.flat();
-      }
-
-      try {
-        const res = await api.get('/cultivation-tasks/my-tasks', { params: { PageIndex: 1, PageSize: 100 } });
-        myTasksRaw = extractItems(res.data);
-      } catch {
-        // ignore — không có my-tasks
-      }
-
-      const mergedMap = new Map();
-
-      logbookTasks.forEach((lt) => {
-        const id = String(getEntityId(lt) || lt.id || lt.taskId || '');
-        if (id) mergedMap.set(id, lt);
-      });
-
-      myTasksRaw.forEach((mt) => {
-        const id = String(getEntityId(mt) || mt.id || mt.taskId || '');
-        if (!id) return;
-        if (mergedMap.has(id)) {
-          const existing = mergedMap.get(id);
-          const combined = { ...mt, ...existing };
-          if (existing.planName) combined.planName = existing.planName;
-          if (existing.status) combined.status = existing.status;
-          mergedMap.set(id, combined);
-        } else {
-          mergedMap.set(id, mt);
-        }
-      });
-
-      const finalItems = Array.from(mergedMap.values());
-      const seen = new Set();
-      const cleanTasks = finalItems.filter((item) => {
-        if (!item) return false;
-        const state = String(item.status || item.state || '').toUpperCase();
-        if (state === 'CANCELLED' || state === 'DELETED' || state === 'INACTIVE' || state === 'DRAFT') {
-          return false;
-        }
-
-        if (myLogbookIdSet.size > 0 || myLogbookNameSet.size > 0) {
-          const itemLbId = String(item.cultivationLogbookId || item.logbookId || item.planId || '');
-          const itemLbName = String(item.planName || item.logbookName || item.cropName || '').trim();
-          const matchId = itemLbId && myLogbookIdSet.has(itemLbId);
-          const matchName = itemLbName && Array.from(myLogbookNameSet).some((n) => n.toLowerCase() === itemLbName.toLowerCase() || itemLbName.toLowerCase().includes(n.toLowerCase()) || n.toLowerCase().includes(itemLbName.toLowerCase()));
-          if (!matchId && !matchName) {
-            return false;
-          }
-        }
-
-        const id = String(getEntityId(item) || item.id || item.taskId || '');
-        if (id && seen.has(id)) return false;
-        if (id) seen.add(id);
-        return true;
-      });
-
-      setTasks(cleanTasks);
-    } catch (requestError) {
-      setError(getApiErrorMessage(requestError, 'Không thể tải công việc.'));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useFocusEffect(useCallback(() => { fetchTasks(); }, [fetchTasks]));
-
-  const openEntry = (task, mode) => {
-    setSelectedTask(task);
-    setEntryMode(mode);
-    if (mode === 'daily') { setDailyLogVisible(true); }
-    else { setDescription(''); }
-  };
-
-  const handleDetailAction = (action, task) => {
-    if (action === 'openLog') openEntry(task, 'daily');
-    if (action === 'openSummary') openEntry(task, 'summary');
-  };
-
-  useEffect(() => {
-    const focusTaskId = route?.params?.focusTaskId;
-    if (!focusTaskId || !tasks.length) return;
-    const focusedTask = tasks.find((task) => getEntityId(task) === focusTaskId);
-    if (!focusedTask) return;
-
-    const status = String(focusedTask.status || '').toUpperCase();
-    if (['ACTIVE', 'IN_PROGRESS'].includes(status)) openEntry(focusedTask, 'daily');
-    else if (status === 'COMPLETED') openEntry(focusedTask, 'summary');
-    navigation?.setParams?.({ focusTaskId: undefined });
-  }, [navigation, route?.params?.focusTaskId, tasks]);
-
-  const submitEntry = async () => {
-    if (!description.trim()) {
-      Alert.alert('Vui lòng nhập mô tả ⚠️', 'Vui lòng viết mô tả tổng kết công việc trước khi gửi.');
-      return;
-    }
-    setSaving(true);
-    try {
-      await api.post(`/cultivation-tasks/${getEntityId(selectedTask)}/summary`, {
-        totalFertilizers: [],
-        totalPesticides: [],
-        images: [],
-        descriptionSummary: description.trim(),
-        completedAt: new Date().toISOString(),
-      });
-      setSelectedTask(null);
-      setDescription('');
-      Alert.alert('Đã gửi báo cáo 🎉', 'Công việc đã gửi bản tổng hợp thành công.');
-      fetchTasks();
-    } catch (requestError) {
-      const serverMsg = getApiErrorMessage(requestError, '');
-      if (serverMsg && (serverMsg.includes('cách ly') || serverMsg.includes('quarantine') || serverMsg.includes('Safe-super'))) {
-        Alert.alert('Cảnh báo thời gian cách ly ⚠️', serverMsg);
-      } else if (serverMsg && serverMsg.includes('nhật ký')) {
-        Alert.alert('Chưa thể gửi tổng hợp ⚠️', serverMsg);
-      } else {
-        Alert.alert('Cảnh báo thời gian cách ly ⚠️', serverMsg || 'Chưa đủ ngày cách ly để gửi Summary.');
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const activeCount = tasks.filter((t) => normalizeStatus(t) === 'IN_PROGRESS').length;
-  const pendingCount = tasks.filter((t) => normalizeStatus(t) === 'PENDING_APPROVAL').length;
-  const completedCount = tasks.filter((t) => normalizeStatus(t) === 'COMPLETED').length;
-
-  const filteredTasks = tasks.filter((task) => {
-    const normState = normalizeStatus(task);
-    if (filter === 'IN_PROGRESS') return normState === 'IN_PROGRESS';
-    if (filter === 'PENDING_APPROVAL') return normState === 'PENDING_APPROVAL';
-    if (filter === 'COMPLETED') return normState === 'COMPLETED';
-    return true;
-  });
-
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#15803d" /></View>;
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Danh sách nhật ký</Text>
-        <Text style={styles.headerSubtitle}>Theo dõi nhật ký và tiến độ các giai đoạn canh tác</Text>
-      </View>
-      <View style={styles.filtersContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filtersContent}
-        >
-          {[
-            ['ALL', `Tất cả (${tasks.length})`],
-            ['IN_PROGRESS', `Đang làm (${activeCount})`],
-            ['PENDING_APPROVAL', `Chờ duyệt (${pendingCount})`],
-            ['COMPLETED', `Hoàn thành (${completedCount})`],
-          ].map(([key, label]) => (
-            <TouchableOpacity
-              key={key}
-              style={[styles.filter, filter === key && styles.filterActive]}
-              onPress={() => setFilter(key)}
-            >
-              <Text style={[styles.filterText, filter === key && styles.filterTextActive]}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <FlatList
-        data={filteredTasks}
-        keyExtractor={(item, index) => String(getEntityId(item) || index)}
-        contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchTasks(); }} colors={['#15803d']} />}
-        renderItem={({ item }) => {
-          const state = normalizeStatus(item);
-          const [label, color, bg, text] = STATUS[state] || [item.status || 'Đang thực hiện', '#15803d', '#dcfce7', '#166534'];
-          const canWriteLog = state === 'IN_PROGRESS';
-          const startDateStr = dateOf(valueOf(item.startDate, item.plannedStartDate, item.activityDate, item.createdAt, item.dueDate, item.endDate));
-          const locationStr = valueOf(item.landPlotName, item.landPlotNames, item.landPlot?.name, item.logbookName);
-          const stageName = valueOf(item.stageName, item.cultivationStageName, item.stage?.name);
-          const planName = valueOf(item.planName, item.logbookName, item.cropName, item.cultivationLogbookName, item.logbook?.name);
-
-          return (
-            <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.88}
-              onPress={() => setDetailTask(item)}
-            >
-              {(stageName || planName) ? (
-                <View style={styles.tagContainer}>
-                  {stageName ? (
-                    <View style={styles.stageTagBadge}>
-                      <Feather name="layers" size={12} color="#0369a1" />
-                      <Text style={styles.stageTagText}>Giai đoạn: {stageName}</Text>
-                    </View>
-                  ) : null}
-                  {planName ? (
-                    <View style={styles.planTagBadge}>
-                      <Feather name="book-open" size={12} color="#15803d" />
-                      <Text style={styles.planTagText}>{planName}</Text>
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
-
-              <View style={styles.rowBetween}>
-                <Text style={styles.cardTitle}>{valueOf(item.taskName, item.name, item.title, 'Công việc canh tác')}</Text>
-                <View style={[styles.badge, { backgroundColor: bg || '#dcfce7' }]}>
-                  <Text style={[styles.badgeText, { color: text || '#166534' }]}>{label}</Text>
-                </View>
-              </View>
-              {item.description ? <Text style={styles.description} numberOfLines={2}>{item.description}</Text> : null}
-              <View style={styles.metaRow}>
-                <Feather name="calendar" size={14} color="#64748b" />
-                <Text style={styles.meta}>Ngày bắt đầu: {startDateStr}</Text>
-              </View>
-              {locationStr ? (
-                <View style={styles.metaRow}>
-                  <Feather name="map-pin" size={14} color="#64748b" />
-                  <Text style={styles.meta}>{locationStr}</Text>
-                </View>
-              ) : null}
-
-              {/* Thành viên */}
-              <View style={styles.memberRow}>
-                <Feather name="users" size={14} color="#64748b" />
-                <Text style={styles.memberLabel}>Thành viên nhóm</Text>
-                {(() => {
-                  const farmerList = item.assignments || item.assignees || item.assignedUsers || item.members || item.workers || [];
-                  const leaderName = item.assignedLeaderName;
-                  const rawLeaderAvatar = valueOf(
-                    item.assignedLeaderAvatar, item.assignedLeaderAvatarUrl,
-                    item.leaderAvatar, item.leaderAvatarUrl,
-                    item.assignedLeader?.avatar, item.assignedLeader?.avatarUrl,
-                    item.leader?.avatar, item.leader?.avatarUrl
-                  );
-                  const leaderAvatar = resolveAvatarUrl(rawLeaderAvatar, currentUserAvatar);
-                  const memberList = [
-                    ...(leaderName ? [{ fullName: leaderName, avatarUrl: leaderAvatar, isLeader: true }] : []),
-                    ...farmerList.map((a) => ({
-                      fullName: valueOf(a.fullName, a.farmerName, a.userName, a.name, '?'),
-                      avatarUrl: resolveAvatarUrl(valueOf(
-                        a.avatarUrl, a.avatar, a.imageUrl, a.photoUrl, a.photo, a.image,
-                        a.user?.avatar, a.user?.avatarUrl, a.farmer?.avatar, a.farmer?.avatarUrl
-                      )),
-                      isLeader: a.role === 'FARM_LEADER' || a.isLeader,
-                    })),
-                  ];
-                  const count = memberList.length || item.memberCount || item.assigneeCount || 0;
-                  if (memberList.length === 0) {
-                    return <Text style={styles.meta}>{count > 0 ? `${count} người` : '—'}</Text>;
-                  }
-                  const MAX_SHOW = 4;
-                  const shown = memberList.slice(0, MAX_SHOW);
-                  const remaining = count - shown.length;
-                  return (
-                    <View style={styles.avatarRow}>
-                      {shown.map((a, i) => {
-                        const name = valueOf(a.fullName, a.name, a.userName, '?');
-                        const initial = (name || '?')[0].toUpperCase();
-                        const isLeader = a.role === 'FARM_LEADER' || a.isLeader;
-                        return (
-                          <View key={i} style={[styles.miniAvatar, isLeader && styles.miniAvatarLeader, { marginLeft: i === 0 ? 0 : -6 }]}>
-                            {a.avatarUrl ? (
-                              <Image source={{ uri: a.avatarUrl }} style={styles.miniAvatarImg} />
-                            ) : (
-                              <Text style={styles.miniAvatarText}>{initial}</Text>
-                            )}
-                          </View>
-                        );
-                      })}
-                      {remaining > 0 ? (
-                        <View style={[styles.miniAvatar, { backgroundColor: '#e2e8f0', marginLeft: -6 }]}>
-                          <Text style={[styles.miniAvatarText, { color: '#475569' }]}>+{remaining}</Text>
-                        </View>
-                      ) : null}
-                      <Text style={[styles.meta, { marginLeft: 6 }]}>{count} người</Text>
-                    </View>
-                  );
-                })()}
-              </View>
-
-              {/* Actions */}
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  style={styles.detailBtn}
-                  onPress={() => setDetailTask(item)}
-                >
-                  <Feather name="eye" size={14} color="#15803d" />
-                  <Text style={styles.detailBtnText}>Xem chi tiết</Text>
-                </TouchableOpacity>
-                {canWriteLog ? (
-                  <TouchableOpacity
-                    style={styles.logBtn}
-                    onPress={() => openEntry(item, 'daily')}
-                  >
-                    <Feather name="edit-3" size={14} color="#fff" />
-                    <Text style={styles.logBtnText}>Ghi nhật ký</Text>
-                  </TouchableOpacity>
-                ) : state === 'PENDING_APPROVAL' ? (
-                  <View style={[styles.logBtn, { backgroundColor: '#d97706' }]}>
-                    <Feather name="clock" size={14} color="#fff" />
-                    <Text style={styles.logBtnText}>Chờ duyệt</Text>
-                  </View>
-                ) : null}
-              </View>
-            </TouchableOpacity>
-          );
-        }}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Feather name="inbox" size={48} color="#cbd5e1" />
-            <Text style={styles.emptyTitle}>Chưa có công việc</Text>
-            <Text style={styles.emptySubtitle}>Bạn chưa được giao công việc nào trong kế hoạch canh tác.</Text>
-          </View>
-        }
-      />
-
-      {/* TaskDetailScreen – full screen modal */}
-      {detailTask ? (
-        <Modal visible animationType="slide" onRequestClose={() => setDetailTask(null)}>
-          <TaskDetailScreen
-            task={detailTask}
-            onClose={() => setDetailTask(null)}
-            onRefreshParent={handleDetailAction}
-          />
-        </Modal>
-      ) : null}
-
-      {/* DailyLogModal */}
-      {dailyLogVisible && selectedTask ? (
-        <DailyLogModal
-          visible={dailyLogVisible}
-          task={selectedTask}
-          onClose={() => { setDailyLogVisible(false); setSelectedTask(null); }}
-          onSuccess={() => { setDailyLogVisible(false); setSelectedTask(null); fetchTasks(); }}
-        />
-      ) : null}
-
-      {/* Summary Modal */}
-      {entryMode === 'summary' && selectedTask && !dailyLogVisible ? (
-        <Modal visible animationType="slide" transparent onRequestClose={() => setSelectedTask(null)}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Tổng kết công việc</Text>
-                <TouchableOpacity onPress={() => { setSelectedTask(null); setDescription(''); }}>
-                  <Feather name="x" size={22} color="#64748b" />
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.modalTaskName}>{valueOf(selectedTask.taskName, selectedTask.name, selectedTask.title)}</Text>
-              <TextInput
-                style={styles.textarea}
-                value={description}
-                onChangeText={setDescription}
-                placeholder="Nhập mô tả tổng kết công việc..."
-                placeholderTextColor="#94a3b8"
-                multiline
-                textAlignVertical="top"
-                numberOfLines={5}
-              />
-              <TouchableOpacity style={styles.submitBtn} onPress={submitEntry} disabled={saving}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Gửi tổng kết</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-      ) : null}
+        </View>
+      )}
     </View>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────────────────
 const ds = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#15803d',
-    paddingTop: 52,
-    paddingBottom: 14,
-    paddingHorizontal: 16,
-    gap: 12,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#15803d',
+    paddingTop: 52, paddingBottom: 14, paddingHorizontal: 16, gap: 12,
   },
   backBtn: { padding: 4 },
   topBarCenter: { flex: 1 },
@@ -1106,9 +652,7 @@ const ds = StyleSheet.create({
   },
   infoCardLabel: { fontSize: 11, color: '#16a34a', fontWeight: '600', marginBottom: 3 },
   infoCardValue: { fontSize: 13, color: '#15803d', fontWeight: '700' },
-  detailGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12,
-  },
+  detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
   detailCell: {
     width: '47%', backgroundColor: '#fff', borderRadius: 10, padding: 12,
     shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
@@ -1166,8 +710,7 @@ const ds = StyleSheet.create({
   photoBoxText: { fontSize: 12, color: '#94a3b8' },
   formTextarea: {
     borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, padding: 10,
-    fontSize: 14, color: '#1e293b', minHeight: 90, marginBottom: 14,
-    backgroundColor: '#fafafa',
+    fontSize: 14, color: '#1e293b', minHeight: 90, marginBottom: 14, backgroundColor: '#fafafa',
   },
   formTextareaDisabled: { backgroundColor: '#f1f5f9', color: '#94a3b8' },
   formSectionHeader: {
@@ -1189,9 +732,7 @@ const ds = StyleSheet.create({
     backgroundColor: '#15803d', borderRadius: 10, paddingVertical: 12, marginBottom: 10,
   },
   submitLogBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  fullFormLink: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center',
-  },
+  fullFormLink: { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
   fullFormLinkText: { fontSize: 12, color: '#64748b' },
   historyLoading: { padding: 20, alignItems: 'center', gap: 8 },
   emptyTabContent: { padding: 32, alignItems: 'center', gap: 8 },
@@ -1212,13 +753,11 @@ const ds = StyleSheet.create({
   historyMaterialContentGreen: { backgroundColor: '#f0fdf4', borderRadius: 10, padding: 10, gap: 3, borderWidth: 1, borderColor: '#dcfce7' },
   historyMaterialLabelGreen: { fontSize: 12, fontWeight: '700', color: '#15803d' },
   historyMaterialItemGreen: { fontSize: 12, color: '#334155', marginLeft: 4, lineHeight: 18 },
-
   historyMaterialBoxPurple: { marginTop: 6, gap: 3 },
   historyMaterialTitlePurple: { fontSize: 13, fontWeight: '700', color: '#1e293b' },
   historyMaterialContentPurple: { backgroundColor: '#faf5ff', borderRadius: 10, padding: 10, gap: 3, borderWidth: 1, borderColor: '#f3e8ff' },
   historyMaterialLabelPurple: { fontSize: 12, fontWeight: '700', color: '#9333ea' },
   historyMaterialItemPurple: { fontSize: 12, color: '#334155', marginLeft: 4, lineHeight: 18 },
-
   historyMaterialHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   historyMaterials: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
   materialTag: {
@@ -1258,19 +797,727 @@ const ds = StyleSheet.create({
   bottomSummaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });
 
+export default function MyTasksScreen({ navigation, route }) {
+  const currentUser = useAuthStore((state) => state.user);
+  const currentUserAvatar = resolveAvatarUrl(currentUser?.avatarUrl || currentUser?.avatar);
 
+  const [tasks, setTasks] = useState([]);
+  const [plans, setPlans] = useState([]);
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filter, setFilter] = useState('ALL');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [dailyLogVisible, setDailyLogVisible] = useState(false);
+  const [entryMode, setEntryMode] = useState('daily');
+  const [description, setDescription] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [detailTask, setDetailTask] = useState(null);
+
+  const fetchTasks = useCallback(async () => {
+    setError('');
+    try {
+      let myTasksRaw = [];
+      let logbookSummaries = [];
+      let logbookTasks = [];
+
+      try {
+        const sumRes = await api.get('/cultivation-tasks/my-logbook-summaries');
+        logbookSummaries = extractItems(sumRes.data);
+      } catch { }
+
+      const myLogbookIdSet = new Set(
+        logbookSummaries
+          .map((lb) => String(getEntityId(lb) || lb.id || lb.logbookId || ''))
+          .filter(Boolean)
+      );
+      const myLogbookNameSet = new Set(
+        logbookSummaries
+          .map((lb) => valueOf(lb.name, lb.title, lb.logbookName, lb.planName))
+          .filter(Boolean)
+      );
+
+      if (myLogbookIdSet.size > 0) {
+        const taskPromises = Array.from(myLogbookIdSet).map(async (lbId) => {
+          const lbObj = logbookSummaries.find((l) => String(getEntityId(l) || l.id || l.logbookId || '') === lbId);
+          const lbName = valueOf(lbObj?.name, lbObj?.title, lbObj?.logbookName, lbObj?.planName);
+          try {
+            const lbRes = await api.get(`/cultivation-tasks/logbook/${lbId}`);
+            const rawBody = lbRes.data;
+            const lbData = rawBody?.data ?? rawBody ?? {};
+            let items = extractItems(lbData);
+            if ((!items || items.length === 0) && lbData?.stages) {
+              items = [];
+              lbData.stages.forEach((stg) => {
+                const stgTasks = stg.tasks || stg.cultivationTasks || [];
+                stgTasks.forEach((t) => {
+                  t.stageName = stg.name;
+                  t.planName = lbName;
+                  t.logbookId = lbId;
+                  items.push(t);
+                });
+              });
+            }
+            items.forEach((t) => {
+              if (lbName) t.planName = lbName;
+              if (lbId) t.logbookId = lbId;
+            });
+            return items;
+          } catch {
+            return [];
+          }
+        });
+        const results = await Promise.all(taskPromises);
+        logbookTasks = results.flat();
+      }
+
+      try {
+        const res = await api.get('/cultivation-tasks/my-tasks', { params: { PageIndex: 1, PageSize: 100 } });
+        myTasksRaw = extractItems(res.data);
+      } catch { }
+
+      const mergedMap = new Map();
+
+      logbookTasks.forEach((lt) => {
+        const id = String(getEntityId(lt) || lt.id || lt.taskId || '');
+        if (id) mergedMap.set(id, lt);
+      });
+
+      myTasksRaw.forEach((mt) => {
+        const id = String(getEntityId(mt) || mt.id || mt.taskId || '');
+        if (!id) return;
+        if (mergedMap.has(id)) {
+          const existing = mergedMap.get(id);
+          const combined = { ...mt, ...existing };
+          if (existing.planName) combined.planName = existing.planName;
+          if (existing.status) combined.status = existing.status;
+          mergedMap.set(id, combined);
+        } else {
+          mergedMap.set(id, mt);
+        }
+      });
+
+      const finalItems = Array.from(mergedMap.values());
+      const seen = new Set();
+      const cleanTasks = finalItems.filter((item) => {
+        if (!item) return false;
+        const state = String(item.status || item.state || '').toUpperCase();
+        if (state === 'CANCELLED' || state === 'DELETED' || state === 'INACTIVE' || state === 'DRAFT') {
+          return false;
+        }
+
+        if (myLogbookIdSet.size > 0 || myLogbookNameSet.size > 0) {
+          const itemLbId = String(item.cultivationLogbookId || item.logbookId || item.planId || '');
+          const itemLbName = String(item.planName || item.logbookName || item.cropName || '').trim();
+          const matchId = itemLbId && myLogbookIdSet.has(itemLbId);
+          const matchName = itemLbName && Array.from(myLogbookNameSet).some((n) => { const ns = String(n || '').toLowerCase(); const is = String(itemLbName || '').toLowerCase(); return ns === is || is.includes(ns) || ns.includes(is); });
+          if (!matchId && !matchName) {
+            return false;
+          }
+        }
+
+        const id = String(getEntityId(item) || item.id || item.taskId || '');
+        if (id && seen.has(id)) return false;
+        if (id) seen.add(id);
+        return true;
+      });
+
+      setTasks(cleanTasks);
+
+      const plansMap = new Map();
+
+      logbookSummaries.forEach((lb) => {
+        const id = String(getEntityId(lb) || lb.id || lb.logbookId || '');
+        const name = valueOf(lb.name, lb.title, lb.logbookName, lb.planName, 'Quy trình canh tác');
+        const cropName = valueOf(lb.cropName, lb.crop?.name, 'Cây trồng');
+        if (id) {
+          plansMap.set(id, { id, name, cropName, tasks: [] });
+        }
+      });
+
+      cleanTasks.forEach((task) => {
+        const planId = String(task.cultivationLogbookId || task.logbookId || task.planId || '');
+        const planName = valueOf(task.planName, task.logbookName, task.cropName, task.cultivationLogbookName, 'Quy trình canh tác');
+        const cropName = valueOf(task.cropName, task.crop?.name, 'Cây trồng');
+
+        let key = planId;
+        if (!key || !plansMap.has(key)) {
+          const existingEntry = Array.from(plansMap.entries()).find(
+            ([_, p]) => String(p.name || '').toLowerCase() === String(planName || '').toLowerCase()
+          );
+          if (existingEntry) {
+            key = existingEntry[0];
+          } else {
+            key = planId || planName;
+          }
+        }
+
+        if (!plansMap.has(key)) {
+          plansMap.set(key, { id: key, name: planName, cropName, tasks: [] });
+        }
+
+        plansMap.get(key).tasks.push(task);
+      });
+
+      const builtPlans = Array.from(plansMap.values()).map((p) => {
+        const tasksCount = p.tasks.length;
+        const doingCount = p.tasks.filter((t) => normalizeStatus(t) === 'IN_PROGRESS').length;
+        const completedCount = p.tasks.filter((t) => normalizeStatus(t) === 'COMPLETED').length;
+        const pendingCount = p.tasks.filter((t) => normalizeStatus(t) === 'PENDING_APPROVAL').length;
+        return {
+          ...p,
+          tasksCount,
+          doingCount,
+          completedCount,
+          pendingCount,
+        };
+      });
+
+      setPlans(builtPlans);
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError, 'Không thể tải công việc.'));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { fetchTasks(); }, [fetchTasks]));
+
+  const openEntry = (task, mode) => {
+    setSelectedTask(task);
+    setEntryMode(mode);
+    if (mode === 'daily') { setDailyLogVisible(true); }
+    else { setDescription(''); }
+  };
+
+  const handleDetailAction = (action, task) => {
+    if (action === 'openLog') openEntry(task, 'daily');
+    if (action === 'openSummary') openEntry(task, 'summary');
+  };
+
+  useEffect(() => {
+    const focusTaskId = route?.params?.focusTaskId;
+    if (!focusTaskId || !tasks.length) return;
+    const focusedTask = tasks.find((task) => getEntityId(task) === focusTaskId);
+    if (!focusedTask) return;
+
+    const taskPlan = plans.find((p) => p.tasks.some((t) => getEntityId(t) === focusTaskId));
+    if (taskPlan) {
+      setSelectedPlan(taskPlan);
+    }
+
+    const status = String(focusedTask.status || '').toUpperCase();
+    if (['ACTIVE', 'IN_PROGRESS'].includes(status)) openEntry(focusedTask, 'daily');
+    else if (status === 'COMPLETED') openEntry(focusedTask, 'summary');
+    navigation?.setParams?.({ focusTaskId: undefined });
+  }, [navigation, route?.params?.focusTaskId, tasks, plans]);
+
+  const submitEntry = async () => {
+    if (!description.trim()) {
+      Alert.alert('Vui lòng nhập mô tả ⚠️', 'Vui lòng viết mô tả tổng kết công việc trước khi gửi.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.post(`/cultivation-tasks/${getEntityId(selectedTask)}/summary`, {
+        totalFertilizers: [],
+        totalPesticides: [],
+        images: [],
+        descriptionSummary: description.trim(),
+        completedAt: new Date().toISOString(),
+      });
+      setSelectedTask(null);
+      setDescription('');
+      Alert.alert('Đã gửi báo cáo 🎉', 'Công việc đã gửi bản tổng hợp thành công.');
+      fetchTasks();
+    } catch (requestError) {
+      const serverMsg = getApiErrorMessage(requestError, '');
+      if (serverMsg && (serverMsg.includes('cách ly') || serverMsg.includes('quarantine') || serverMsg.includes('Safe-super'))) {
+        Alert.alert('Cảnh báo thời gian cách ly ⚠️', serverMsg);
+      } else if (serverMsg && serverMsg.includes('nhật ký')) {
+        Alert.alert('Chưa thể gửi tổng hợp ⚠️', serverMsg);
+      } else {
+        Alert.alert('Cảnh báo thời gian cách ly ⚠️', serverMsg || 'Chưa đủ ngày cách ly để gửi Summary.');
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filteredPlans = plans.filter((p) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.trim().toLowerCase();
+    return (
+      String(p.name || '').toLowerCase().includes(q) ||
+      String(p.cropName || '').toLowerCase().includes(q) ||
+      (Array.isArray(p.tasks) && p.tasks.some((t) =>
+        String(valueOf(t.taskName, t.name, t.title, '') || '').toLowerCase().includes(q) ||
+        String(valueOf(t.stageName, t.stage?.name, '') || '').toLowerCase().includes(q)
+      ))
+    );
+  });
+
+  const currentTasksList = selectedPlan
+    ? (selectedPlan.tasks && selectedPlan.tasks.length ? selectedPlan.tasks : tasks.filter((t) => {
+      const pId = String(t.cultivationLogbookId || t.logbookId || t.planId || '');
+      const pName = String(valueOf(t.planName, t.logbookName, t.cropName, '') || '').toLowerCase();
+      return pId === String(selectedPlan.id) || pName === String(selectedPlan.name || '').toLowerCase();
+    }))
+    : tasks;
+
+  const activeCount = currentTasksList.filter((t) => normalizeStatus(t) === 'IN_PROGRESS').length;
+  const pendingCount = currentTasksList.filter((t) => normalizeStatus(t) === 'PENDING_APPROVAL').length;
+  const completedCount = currentTasksList.filter((t) => normalizeStatus(t) === 'COMPLETED').length;
+
+  const filteredTasks = currentTasksList.filter((task) => {
+    const normState = normalizeStatus(task);
+    if (filter === 'IN_PROGRESS') return normState === 'IN_PROGRESS';
+    if (filter === 'PENDING_APPROVAL') return normState === 'PENDING_APPROVAL';
+    if (filter === 'COMPLETED') return normState === 'COMPLETED';
+    return true;
+  });
+
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#15803d" /></View>;
+
+  if (!selectedPlan) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.planCatalogHeader}>
+          <View style={styles.planCatalogHeaderRow}>
+            <Text style={styles.planCatalogTitle}>Danh mục Kế hoạch</Text>
+            <View style={styles.planCatalogBadge}>
+              <Text style={styles.planCatalogBadgeText}>{plans.length} Kế hoạch</Text>
+            </View>
+          </View>
+
+          <View style={styles.searchBar}>
+            <Feather name="search" size={18} color="#94a3b8" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Tìm kế hoạch, giai đoạn..."
+              placeholderTextColor="#94a3b8"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery ? (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Feather name="x" size={18} color="#94a3b8" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <FlatList
+          data={filteredPlans}
+          keyExtractor={(item, index) => String(item.id || index)}
+          contentContainerStyle={styles.planListContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchTasks(); }} colors={['#15803d']} />}
+          renderItem={({ item }) => {
+            return (
+              <TouchableOpacity
+                style={styles.planCard}
+                activeOpacity={0.88}
+                onPress={() => setSelectedPlan(item)}
+              >
+                <View style={styles.planCardTopRow}>
+                  <Text style={styles.planCardTitle} numberOfLines={2}>
+                    {item.name}
+                  </Text>
+                  <View style={styles.planTaskBadge}>
+                    <Text style={styles.planTaskBadgeText}>{item.tasksCount} task</Text>
+                  </View>
+                </View>
+
+                <View style={styles.planCardBottomRow}>
+                  <Text style={styles.planCropText}>{item.cropName}</Text>
+                  <Text style={styles.planDoingText}>{item.doingCount} đang làm</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          }}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Feather name="book-open" size={48} color="#cbd5e1" />
+              <Text style={styles.emptyTitle}>Chưa có kế hoạch</Text>
+              <Text style={styles.emptySubtitle}>Không tìm thấy kế hoạch canh tác nào.</Text>
+            </View>
+          }
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity
+            style={styles.headerBackBtn}
+            onPress={() => setSelectedPlan(null)}
+          >
+            <Feather name="arrow-left" size={20} color="#fff" />
+            <Text style={styles.headerBackText}>Danh mục Kế hoạch</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.headerTitle}>Danh sách nhật ký</Text>
+        <Text style={styles.headerSubtitle}>Theo dõi nhật ký và tiến độ các giai đoạn canh tác</Text>
+      </View>
+
+      <View style={styles.filtersContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersContent}
+        >
+          {[
+            ['ALL', `Tất cả (${currentTasksList.length})`],
+            ['IN_PROGRESS', `Đang làm (${activeCount})`],
+            ['PENDING_APPROVAL', `Chờ duyệt (${pendingCount})`],
+            ['COMPLETED', `Hoàn thành (${completedCount})`],
+          ].map(([key, label]) => (
+            <TouchableOpacity
+              key={key}
+              style={[styles.filter, filter === key && styles.filterActive]}
+              onPress={() => setFilter(key)}
+            >
+              <Text style={[styles.filterText, filter === key && styles.filterTextActive]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      <FlatList
+        data={filteredTasks}
+        keyExtractor={(item, index) => String(getEntityId(item) || index)}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchTasks(); }} colors={['#15803d']} />}
+        renderItem={({ item }) => {
+          const state = normalizeStatus(item);
+          const [label, color, bg, text] = STATUS[state] || [item.status || 'Đang thực hiện', '#15803d', '#dcfce7', '#166534'];
+          const canWriteLog = state === 'IN_PROGRESS';
+          const startDateStr = dateOf(valueOf(item.startDate, item.plannedStartDate, item.activityDate, item.createdAt, item.dueDate, item.endDate));
+          const locationStr = valueOf(item.landPlotName, item.landPlotNames, item.landPlot?.name, item.logbookName);
+          const stageName = valueOf(item.stageName, item.cultivationStageName, item.stage?.name);
+          const planName = valueOf(item.planName, item.logbookName, item.cropName, item.cultivationLogbookName, item.logbook?.name);
+
+          return (
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.88}
+              onPress={() => setDetailTask(item)}
+            >
+              {(stageName || planName) ? (
+                <View style={styles.tagContainer}>
+                  {stageName ? (
+                    <View style={styles.stageTagBadge}>
+                      <Feather name="layers" size={12} color="#0369a1" />
+                      <Text style={styles.stageTagText}>Giai đoạn: {stageName}</Text>
+                    </View>
+                  ) : null}
+                  {planName ? (
+                    <View style={styles.planTagBadge}>
+                      <Feather name="book-open" size={12} color="#15803d" />
+                      <Text style={styles.planTagText}>{planName}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
+              <View style={styles.rowBetween}>
+                <Text style={styles.cardTitle}>{valueOf(item.taskName, item.name, item.title, 'Công việc canh tác')}</Text>
+                <View style={[styles.badge, { backgroundColor: bg || '#dcfce7' }]}>
+                  <Text style={[styles.badgeText, { color: text || '#166534' }]}>{label}</Text>
+                </View>
+              </View>
+
+              {item.description ? <Text style={styles.description} numberOfLines={2}>{item.description}</Text> : null}
+
+              <View style={styles.metaRow}>
+                <Feather name="calendar" size={14} color="#64748b" />
+                <Text style={styles.meta}>Ngày bắt đầu: {startDateStr}</Text>
+              </View>
+
+              {locationStr ? (
+                <View style={styles.metaRow}>
+                  <Feather name="map-pin" size={14} color="#64748b" />
+                  <Text style={styles.meta}>{locationStr}</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.memberRow}>
+                <Feather name="users" size={14} color="#64748b" />
+                <Text style={styles.memberLabel}>Thành viên nhóm</Text>
+                {(() => {
+                  const farmerList = item.assignments || item.assignees || item.assignedUsers || item.members || item.workers || [];
+                  const memberList = farmerList.map((a) => ({
+                    fullName: valueOf(a.fullName, a.farmerName, a.userName, a.name, '?'),
+                    avatarUrl: resolveAvatarUrl(valueOf(
+                      a.avatarUrl, a.avatar, a.imageUrl, a.photoUrl, a.photo, a.image,
+                      a.user?.avatar, a.user?.avatarUrl, a.farmer?.avatar, a.farmer?.farmerAvatar, a.farmer?.avatarUrl
+                    )),
+                  }));
+                  const count = memberList.length || item.memberCount || item.assigneeCount || 0;
+                  if (memberList.length === 0) {
+                    return <Text style={styles.meta}>{count > 0 ? `${count} người` : '—'}</Text>;
+                  }
+                  const MAX_SHOW = 3;
+                  const shown = memberList.slice(0, MAX_SHOW);
+                  const remaining = count - shown.length;
+                  return (
+                    <View style={styles.avatarRow}>
+                      {shown.map((a, i) => {
+                        const name = valueOf(a.fullName, a.name, a.userName, '?');
+                        const initial = (name || '?')[0].toUpperCase();
+                        return (
+                          <View key={i} style={[styles.miniAvatar, { marginLeft: i === 0 ? 0 : -6 }]}>
+                            {a.avatarUrl ? (
+                              <Image source={{ uri: a.avatarUrl }} style={styles.miniAvatarImg} />
+                            ) : (
+                              <Text style={styles.miniAvatarText}>{initial}</Text>
+                            )}
+                          </View>
+                        );
+                      })}
+                      {remaining > 0 ? (
+                        <View style={[styles.miniAvatar, { backgroundColor: '#1e40af', marginLeft: -6 }]}>
+                          <Text style={[styles.miniAvatarText, { color: '#fff' }]}>+{remaining}</Text>
+                        </View>
+                      ) : null}
+                      <Text style={[styles.meta, { marginLeft: 6 }]}>{count} người</Text>
+                    </View>
+                  );
+                })()}
+              </View>
+
+              <View style={styles.actions}>
+                <TouchableOpacity
+                  style={styles.detailBtn}
+                  onPress={() => setDetailTask(item)}
+                >
+                  <Feather name="eye" size={14} color="#15803d" />
+                  <Text style={styles.detailBtnText}>Xem chi tiết</Text>
+                </TouchableOpacity>
+                {canWriteLog ? (
+                  <TouchableOpacity
+                    style={styles.logBtn}
+                    onPress={() => openEntry(item, 'daily')}
+                  >
+                    <Feather name="edit-3" size={14} color="#fff" />
+                    <Text style={styles.logBtnText}>Ghi nhật ký</Text>
+                  </TouchableOpacity>
+                ) : state === 'PENDING_APPROVAL' ? (
+                  <View style={[styles.logBtn, { backgroundColor: '#d97706' }]}>
+                    <Feather name="clock" size={14} color="#fff" />
+                    <Text style={styles.logBtnText}>Chờ duyệt</Text>
+                  </View>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+          );
+        }}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Feather name="inbox" size={48} color="#cbd5e1" />
+            <Text style={styles.emptyTitle}>Chưa có công việc</Text>
+            <Text style={styles.emptySubtitle}>Bạn chưa có công việc nào trong danh sách này.</Text>
+          </View>
+        }
+      />
+
+      {detailTask ? (
+        <Modal visible animationType="slide" onRequestClose={() => setDetailTask(null)}>
+          <TaskDetailScreen
+            task={detailTask}
+            onClose={() => setDetailTask(null)}
+            onRefreshParent={handleDetailAction}
+          />
+        </Modal>
+      ) : null}
+
+      {dailyLogVisible && selectedTask ? (
+        <DailyLogModal
+          visible={dailyLogVisible}
+          task={selectedTask}
+          onClose={() => { setDailyLogVisible(false); setSelectedTask(null); }}
+          onSuccess={() => { setDailyLogVisible(false); setSelectedTask(null); fetchTasks(); }}
+        />
+      ) : null}
+
+      {entryMode === 'summary' && selectedTask && !dailyLogVisible ? (
+        <Modal visible animationType="slide" transparent onRequestClose={() => setSelectedTask(null)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Tổng kết công việc</Text>
+                <TouchableOpacity onPress={() => { setSelectedTask(null); setDescription(''); }}>
+                  <Feather name="x" size={22} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.modalTaskName}>{valueOf(selectedTask.taskName, selectedTask.name, selectedTask.title)}</Text>
+              <TextInput
+                style={styles.textarea}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Nhập mô tả tổng kết công việc..."
+                placeholderTextColor="#94a3b8"
+                multiline
+                textAlignVertical="top"
+                numberOfLines={5}
+              />
+              <TouchableOpacity style={styles.submitBtn} onPress={submitEntry} disabled={saving}>
+                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Gửi tổng kết</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  planCatalogHeader: {
+    backgroundColor: '#15803d',
+    paddingTop: 52,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  planCatalogHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  planCatalogTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  planCatalogBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
+  },
+  planCatalogBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    height: 46,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0f172a',
+    paddingVertical: 0,
+  },
+  planListContent: {
+    padding: 16,
+    gap: 12,
+    paddingBottom: 40,
+  },
+  planCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  planCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 10,
+  },
+  planCardTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
+    lineHeight: 22,
+  },
+  planTaskBadge: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  planTaskBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  planCardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  planCropText: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  planDoingText: {
+    fontSize: 13,
+    color: '#15803d',
+    fontWeight: '700',
+  },
+
   header: {
     backgroundColor: '#15803d',
     paddingTop: 52,
     paddingBottom: 20,
     paddingHorizontal: 20,
   },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  headerBackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+    paddingRight: 10,
+  },
+  headerBackText: {
+    color: '#dcfce7',
+    fontSize: 13,
+    fontWeight: '600',
+  },
   headerTitle: { fontSize: 24, fontWeight: '800', color: '#fff' },
   headerSubtitle: { fontSize: 13, color: '#bbf7d0', marginTop: 4 },
+
   filtersContainer: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
   filtersContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   filter: {
@@ -1324,7 +1571,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
   },
-  planSubTag: { fontSize: 11, color: '#15803d', fontWeight: '600', marginBottom: 8 },
   rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 },
   cardTitle: { flex: 1, fontSize: 15, fontWeight: '800', color: '#0f172a' },
   badge: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 12, flexShrink: 0 },
@@ -1336,11 +1582,10 @@ const styles = StyleSheet.create({
   memberLabel: { fontSize: 13, color: '#64748b', marginRight: 4 },
   avatarRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
   miniAvatar: {
-    width: 26, height: 26, borderRadius: 13, backgroundColor: '#15803d',
+    width: 26, height: 26, borderRadius: 13, backgroundColor: '#1d4ed8',
     alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#fff',
     overflow: 'hidden',
   },
-  miniAvatarLeader: { backgroundColor: '#1d4ed8' },
   miniAvatarImg: { width: 26, height: 26, borderRadius: 13 },
   miniAvatarText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   actions: { flexDirection: 'row', gap: 8 },
