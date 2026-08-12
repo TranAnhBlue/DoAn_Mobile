@@ -17,7 +17,8 @@ const supervisorApi = {
   getStageDailyLogs: (stageId) => api.get(`/cultivation-daily-logs/stage/${stageId}`),
   getStageSummary: (stageId) => api.get(`/cultivation-stages/${stageId}/summary`),
   getStageOfficialLogs: (stageId) => api.get(`/cultivation-stages/${stageId}/logs`),
-  saveOfficialLog: (stageId, supervisorDescription) => api.post(`/cultivation-stages/${stageId}/official-logs`, { supervisorDescription }),
+  saveOfficialLog: (stageId, payload) => api.post(`/cultivation-stages/${stageId}/official-logs`, typeof payload === 'string' ? { supervisorDescription: payload } : payload),
+  completeStage: (stageId) => api.post(`/cultivation-stages/${stageId}/complete`),
   submitCompletion: (logbookId) => api.post(`/cultivation-logbooks/${logbookId}/submit-completion`),
 };
 
