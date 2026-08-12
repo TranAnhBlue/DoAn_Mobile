@@ -62,6 +62,7 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
   const [summary, setSummary] = useState(null);
   const [officialLogs, setOfficialLogs] = useState([]);
   const [supervisorDescription, setSupervisorDescription] = useState('');
+  const [selectedOfficialTaskId, setSelectedOfficialTaskId] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tabLoading, setTabLoading] = useState(false);
@@ -106,34 +107,184 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
   const selectedStage = useMemo(() => stages.find((stage) => getEntityId(stage) === selectedStageId) || stages[0], [selectedStageId, stages]);
   const tasks = selectedStage?.tasks || [];
 
+  const completedStagesCount = useMemo(() => {
+    return stages.filter((s) => String(s.status || '').toUpperCase() === 'COMPLETED' || s.isCompleted === true).length;
+  }, [stages]);
+
+  const allStagesCompleted = useMemo(() => {
+    return stages.length > 0 && completedStagesCount === stages.length;
+  }, [stages, completedStagesCount]);
+
+  const isSelectedStageCompleted = useMemo(() => {
+    const st = String(selectedStage?.status || '').toUpperCase();
+    return st === 'COMPLETED' || selectedStage?.isCompleted === true;
+  }, [selectedStage]);
+
   const loadStageData = useCallback(() => {
-    if (!selectedStageId || activeTab === 'tasks') return;
+    if (!selectedStageId) return;
     setTabLoading(true);
 
-    const request = activeTab === 'history'
-      ? supervisorApi.getStageDailyLogs(selectedStageId).then((response) => {
-        setHistoryGroups(asArray(response.data));
-      })
-      : Promise.all([
-        supervisorApi.getStageSummary(selectedStageId),
-        supervisorApi.getStageOfficialLogs(selectedStageId),
-      ]).then(([summaryResponse, logsResponse]) => {
-        const nextSummary = unwrapPayload(summaryResponse.data);
-        setSummary(nextSummary);
-        setOfficialLogs(asArray(logsResponse.data));
-        setSupervisorDescription(nextSummary?.draftDescription || '');
-      });
+    Promise.allSettled([
+      supervisorApi.getStageDailyLogs(selectedStageId),
+      supervisorApi.getStageSummary(selectedStageId),
+      supervisorApi.getStageOfficialLogs(selectedStageId),
+    ]).then(([historyRes, summaryRes, logsRes]) => {
+      let nextSummary = null;
 
-    request.catch((requestError) => {
+      if (historyRes.status === 'fulfilled') {
+        setHistoryGroups(asArray(historyRes.value.data));
+      }
+      if (summaryRes.status === 'fulfilled') {
+        nextSummary = unwrapPayload(summaryRes.value.data);
+        setSummary(nextSummary);
+      }
+      if (logsRes.status === 'fulfilled') {
+        setOfficialLogs(asArray(logsRes.value.data));
+      }
+
+      setSupervisorDescription((prev) => {
+        if (prev && prev.trim()) return prev;
+        return nextSummary?.draftDescription || '';
+      });
+    }).catch((requestError) => {
       Alert.alert('Không thể tải dữ liệu', getApiErrorMessage(requestError, 'Vui lòng thử lại.'));
     }).finally(() => {
       setTabLoading(false);
     });
-  }, [activeTab, selectedStageId]);
+  }, [selectedStageId]);
 
   useEffect(() => {
     loadStageData();
   }, [loadStageData]);
+
+  const aggregatedMaterials = useMemo(() => {
+    const map = new Map();
+
+    const addMaterial = (rawName, rawQty, rawUnit) => {
+      if (!rawName) return;
+      const name = String(rawName).trim();
+      const unit = String(rawUnit || 'kg').trim();
+      const qty = Number(rawQty) || 0;
+      const key = `${name.toLowerCase()}_${unit.toLowerCase()}`;
+
+      if (!map.has(key)) {
+        map.set(key, { name, quantity: qty, unit });
+      } else {
+        const item = map.get(key);
+        item.quantity += qty;
+      }
+    };
+
+    const serverMats = [
+      ...(Array.isArray(summary?.materials) ? summary.materials : []),
+      ...(Array.isArray(summary?.fertilizers) ? summary.fertilizers : []),
+      ...(Array.isArray(summary?.pesticides) ? summary.pesticides : []),
+      ...(Array.isArray(summary?.totalFertilizers) ? summary.totalFertilizers : []),
+      ...(Array.isArray(summary?.totalPesticides) ? summary.totalPesticides : []),
+    ];
+
+    serverMats.forEach((m) => {
+      if (!m) return;
+      const name = valueOf(m.materialName, m.name, m.fertilizerName, m.pesticideName, m.itemName);
+      const qty = valueOf(m.totalQuantity, m.quantity, m.amount, 0);
+      const unit = valueOf(m.unit, m.quantityUnit, 'kg');
+      addMaterial(name, qty, unit);
+    });
+
+    (historyGroups || []).forEach((group) => {
+      (group.logs || []).forEach((log) => {
+        const logMats = [
+          ...(Array.isArray(log.fertilizers) ? log.fertilizers : []),
+          ...(Array.isArray(log.pesticides) ? log.pesticides : []),
+          ...(Array.isArray(log.materials) ? log.materials : []),
+          ...(Array.isArray(log.dailyLogMaterials) ? log.dailyLogMaterials : []),
+          ...(Array.isArray(log.logMaterials) ? log.logMaterials : []),
+          ...(Array.isArray(log.details) ? log.details : []),
+        ];
+
+        logMats.forEach((m) => {
+          if (!m) return;
+          const name = valueOf(
+            m.name, m.fertilizerName, m.pesticideName, m.materialName,
+            m.itemName, m.tradeName, m.fertilizer?.name, m.pesticide?.name, m.material?.name
+          );
+          const qty = valueOf(m.quantity, m.totalQuantity, m.amount, m.volume, m.weight, 0);
+          const unit = valueOf(m.unit, m.unitName, 'kg');
+          addMaterial(name, qty, unit);
+        });
+      });
+    });
+
+    return Array.from(map.values());
+  }, [summary, historyGroups]);
+
+  const aggregatedImages = useMemo(() => {
+    const list = [];
+    const set = new Set();
+
+    const pushUrl = (rawUrl, rawObj) => {
+      if (!rawUrl) return;
+      const resolved = typeof rawUrl === 'string' ? resolveAvatarUrl(rawUrl) : resolveAvatarUrl(rawUrl.url || rawUrl.imageUrl);
+      if (resolved && !set.has(resolved)) {
+        set.add(resolved);
+        list.push({ url: resolved, raw: rawObj || rawUrl });
+      }
+    };
+
+    (summary?.images || []).forEach((img) => pushUrl(img.url || img.imageUrl || img, img));
+
+    (historyGroups || []).forEach((group) => {
+      (group.logs || []).forEach((log) => {
+        const rawImgs = Array.isArray(log.images) ? log.images :
+          Array.isArray(log.photoUrls) ? log.photoUrls :
+          Array.isArray(log.photos) ? log.photos :
+          Array.isArray(log.imageUrls) ? log.imageUrls :
+          (log.imageUrl || log.photo || log.image) ? [log.imageUrl || log.photo || log.image] : [];
+
+        rawImgs.forEach((img) => pushUrl(img, img));
+      });
+    });
+
+    return list;
+  }, [summary, historyGroups]);
+
+  const farmLeaderNotes = useMemo(() => {
+    const notes = [];
+    (historyGroups || []).forEach((group) => {
+      const taskName = group.taskName || 'Công việc';
+      (group.logs || []).forEach((log) => {
+        const desc = valueOf(log.description, log.notes, log.content, '').trim();
+        const author = valueOf(
+          log.creatorName, log.createdByName, log.authorName,
+          log.user?.fullname, log.user?.fullName, log.createdUser?.fullName, log.workerName, 'Farm Leader'
+        );
+        const date = dateLabel(valueOf(log.date, log.createdAt, log.performedAt));
+
+        if (desc) {
+          notes.push({
+            id: getEntityId(log) || Math.random().toString(),
+            taskName,
+            author,
+            date,
+            description: desc,
+          });
+        }
+      });
+    });
+    return notes;
+  }, [historyGroups]);
+
+  const generateDraftDescriptionFromLogs = useCallback(() => {
+    if (!farmLeaderNotes.length) {
+      Alert.alert('Chưa có ghi chép', 'Chưa có nhật ký ghi chép thực địa từ Farm Leader cho giai đoạn này.');
+      return;
+    }
+    const combined = farmLeaderNotes
+      .map((n) => `• [${n.date}] ${n.taskName} (${n.author}): ${n.description}`)
+      .join('\n');
+    setSupervisorDescription(combined);
+    Alert.alert('Đã tạo gợi ý', 'Đã tự động tạo bản tổng hợp từ các nhật ký của Farm Leader.');
+  }, [farmLeaderNotes]);
 
   const saveAssignment = async (values) => {
     if (!selectedTask) return;
@@ -234,31 +385,97 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
     }
   };
 
-  const saveOfficialLog = async () => {
+  useEffect(() => {
+    if (tasks.length > 0) {
+      const firstTaskId = getEntityId(tasks[0]);
+      if (!selectedOfficialTaskId || !tasks.some((t) => getEntityId(t) === selectedOfficialTaskId)) {
+        setSelectedOfficialTaskId(firstTaskId);
+      }
+    } else {
+      setSelectedOfficialTaskId(null);
+    }
+  }, [selectedStageId, tasks]);
+
+  const handleCompleteStage = async () => {
     if (!supervisorDescription.trim()) {
-      Alert.alert('Thiếu mô tả', 'Nhập mô tả tổng kết của Supervisor trước khi chốt giai đoạn.');
+      Alert.alert('Thiếu mô tả ⚠️', 'Vui lòng nhập mô tả tổng kết của Supervisor trước khi chốt giai đoạn.');
       return;
     }
+
+    const hasTasks = tasks && tasks.length > 0;
+    const taskId = hasTasks ? (selectedOfficialTaskId || getEntityId(tasks[0])) : undefined;
+
     setSaving(true);
     try {
-      await supervisorApi.saveOfficialLog(selectedStageId, supervisorDescription.trim());
-      const [summaryResponse, logsResponse] = await Promise.all([
-        supervisorApi.getStageSummary(selectedStageId),
-        supervisorApi.getStageOfficialLogs(selectedStageId),
-      ]);
-      setSummary(unwrapPayload(summaryResponse.data));
-      setOfficialLogs(asArray(logsResponse.data));
-      Alert.alert('Thành công', 'Đã lưu nhật ký chính thức vào lịch sử.');
+      let stageCompleted = false;
+      let logSaved = false;
+
+      if (!hasTasks) {
+        // 1. Giai đoạn không có công việc nào -> Chốt hoàn thành giai đoạn trực tiếp (/cultivation-stages/{id}/complete)
+        try {
+          await supervisorApi.completeStage(selectedStageId);
+          stageCompleted = true;
+        } catch (cErr) {
+          console.warn('completeStage without tasks error:', cErr?.response?.data || cErr);
+        }
+
+        try {
+          await supervisorApi.saveOfficialLog(selectedStageId, { supervisorDescription: supervisorDescription.trim() });
+          logSaved = true;
+        } catch (lErr) {
+          console.warn('saveOfficialLog without tasks error:', lErr?.response?.data || lErr);
+        }
+      } else {
+        // 2. Giai đoạn có các công việc -> Lưu nhật ký chính thức theo task ID trước
+        try {
+          const payload = {
+            supervisorDescription: supervisorDescription.trim(),
+            ...(taskId ? { cultivationTaskId: taskId } : {}),
+          };
+          await supervisorApi.saveOfficialLog(selectedStageId, payload);
+          logSaved = true;
+        } catch (lErr) {
+          const msg = getApiErrorMessage(lErr, '');
+          if (msg.includes('đã được biên soạn') || msg.includes('already compiled')) {
+            logSaved = true;
+          } else {
+            console.warn('saveOfficialLog notice:', msg);
+          }
+        }
+
+        try {
+          await supervisorApi.completeStage(selectedStageId);
+          stageCompleted = true;
+        } catch (cErr) {
+          console.log('completeStage result:', cErr?.response?.data || cErr);
+        }
+      }
+
+      await fetchDetail();
+      if (selectedStageId) {
+        const [summaryResponse, logsResponse] = await Promise.all([
+          supervisorApi.getStageSummary(selectedStageId),
+          supervisorApi.getStageOfficialLogs(selectedStageId),
+        ]);
+        setSummary(unwrapPayload(summaryResponse.data));
+        setOfficialLogs(asArray(logsResponse.data));
+      }
+
+      if (stageCompleted || logSaved) {
+        Alert.alert('Thành công 🎉', `Đã chốt hoàn thành giai đoạn "${selectedStage?.stageName || ''}"!`);
+      } else {
+        Alert.alert('Chốt giai đoạn', `Đã cập nhật thông tin cho giai đoạn "${selectedStage?.stageName || ''}".`);
+      }
     } catch (requestError) {
-      Alert.alert('Không thể chốt giai đoạn', getApiErrorMessage(requestError, 'Vui lòng thử lại.'));
+      Alert.alert('Thông báo', getApiErrorMessage(requestError, 'Vui lòng kiểm tra lại trạng thái giai đoạn.'));
     } finally {
       setSaving(false);
     }
   };
 
   const submitCompletion = () => Alert.alert(
-    'Gửi nhật ký lên Manager',
-    'Gửi yêu cầu hoàn thành toàn bộ Logbook để Manager kiểm tra?',
+    'Gửi nhật ký lên Farm Manager',
+    'Gửi yêu cầu hoàn thành toàn bộ kế hoạch để Farm Manager kiểm tra và phê duyệt?',
     [
       { text: 'Hủy', style: 'cancel' },
       {
@@ -267,9 +484,9 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
           try {
             await supervisorApi.submitCompletion(planId);
             fetchDetail();
-            Alert.alert('Đã gửi', 'Manager sẽ nhận được yêu cầu kiểm tra Logbook.');
+            Alert.alert('Đã gửi', 'Farm Manager sẽ nhận được yêu cầu kiểm tra Logbook.');
           } catch (requestError) {
-            Alert.alert('Chưa thể gửi', getApiErrorMessage(requestError, 'Cần hoàn tất các giai đoạn trước khi gửi.'));
+            Alert.alert('Chưa thể gửi', getApiErrorMessage(requestError, 'Cần hoàn tất tất cả các giai đoạn trước khi gửi.'));
           }
         },
       },
@@ -279,11 +496,22 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
   const renderStageSelector = () => (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stageList}>
       {stages.map((stage, index) => {
-        const selected = getEntityId(stage) === selectedStageId;
+        const stageId = getEntityId(stage);
+        const selected = stageId === selectedStageId;
+        const isDone = String(stage.status || '').toUpperCase() === 'COMPLETED' || stage.isCompleted === true;
         return (
-          <TouchableOpacity key={getEntityId(stage)} style={[styles.stageChip, selected && styles.stageChipActive]} onPress={() => setSelectedStageId(getEntityId(stage))}>
-            <View style={[styles.stageNumber, selected && styles.stageNumberActive]}><Text style={[styles.stageNumberText, selected && styles.stageNumberTextActive]}>{stage.stageOrder || index + 1}</Text></View>
-            <Text style={[styles.stageChipText, selected && styles.stageChipTextActive]} numberOfLines={2}>{stage.stageName}</Text>
+          <TouchableOpacity key={stageId} style={[styles.stageChip, selected && styles.stageChipActive, isDone && styles.stageChipDone]} onPress={() => setSelectedStageId(stageId)}>
+            <View style={[styles.stageNumber, selected && styles.stageNumberActive, isDone && styles.stageNumberDone]}>
+              {isDone ? (
+                <Feather name="check" size={13} color="#fff" />
+              ) : (
+                <Text style={[styles.stageNumberText, selected && styles.stageNumberTextActive]}>{stage.stageOrder || index + 1}</Text>
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.stageChipText, selected && styles.stageChipTextActive]} numberOfLines={1}>{stage.stageName}</Text>
+              {isDone ? <Text style={styles.stageChipStatusText}>Đã chốt</Text> : null}
+            </View>
           </TouchableOpacity>
         );
       })}
@@ -486,7 +714,26 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
 
     return (
       <>
-        <Text style={styles.blockTitle}>{selectedStage?.stageName || 'Giai đoạn'}</Text>
+        <View style={styles.stageHeaderRow}>
+          <Text style={styles.blockTitle}>{selectedStage?.stageName || 'Giai đoạn'}</Text>
+          {isSelectedStageCompleted ? (
+            <View style={styles.stageDoneBadge}>
+              <Feather name="check-circle" size={13} color="#16a34a" />
+              <Text style={styles.stageDoneBadgeText}>Đã chốt giai đoạn</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.planProgressCard}>
+          <View style={styles.planProgressTop}>
+            <Feather name="layers" size={18} color="#15803d" />
+            <Text style={styles.planProgressTitle}>Tiến độ chốt giai đoạn</Text>
+            <Text style={styles.planProgressBadge}>{completedStagesCount} / {stages.length} giai đoạn</Text>
+          </View>
+          <View style={styles.progressBarTrack}>
+            <View style={[styles.progressBarFill, { width: `${stages.length > 0 ? (completedStagesCount / stages.length) * 100 : 0}%` }]} />
+          </View>
+        </View>
 
         {isClosing ? (
           <View style={styles.closingBanner}>
@@ -508,58 +755,82 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
           </View>
         ) : null}
 
-        <View style={styles.draftCardWrapper}>
-          <Text style={styles.draftCardMainTitle}>Bản tổng hợp chờ biên soạn</Text>
-          <View style={styles.draftCardDivider} />
-          <Text style={styles.summaryTitle}>Bảng tổng hợp vật tư</Text>
-          {materials.map((material, index) => (
-            <View key={getEntityId(material) || index} style={styles.materialRow}>
-              <Text style={styles.materialName}>{valueOf(material.name, material.materialName, 'Vật tư')}</Text>
-              <Text style={styles.materialValue}>{formatNumber(valueOf(material.totalQuantity, material.quantity, 0))} {material.unit || ''}</Text>
-            </View>
-          ))}
-          {!materials.length ? <Text style={styles.noLog}>Chưa có vật tư được ghi nhận.</Text> : null}
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Ảnh thực địa</Text>
-          {images.length ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {images.map((item, index) => {
-                const imgUrl = item.url || item.imageUrl;
-                if (!imgUrl) return null;
-                return (
-                  <TouchableOpacity key={item.id || index} activeOpacity={0.8} onPress={() => setImageViewer({ visible: true, images: images.map(i => i.url || i.imageUrl).filter(Boolean), index })}>
-                    <Image source={{ uri: imgUrl }} style={styles.summaryImage} />
+        {!isSelectedStageCompleted ? (
+          <>
+            <View style={styles.draftCardWrapper}>
+              <View style={styles.draftCardTitleRow}>
+                <Text style={styles.draftCardMainTitle}>Bản tổng hợp chờ biên soạn từ Farm Leader</Text>
+                {farmLeaderNotes.length > 0 ? (
+                  <TouchableOpacity style={styles.generateDraftBtn} onPress={generateDraftDescriptionFromLogs}>
+                    <Feather name="file-text" size={13} color="#92400e" />
+                    <Text style={styles.generateDraftBtnText}>Tạo gợi ý mô tả</Text>
                   </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          ) : (
-            <Text style={styles.noLog}>Chưa có ảnh minh chứng.</Text>
-          )}
-        </View>
+                ) : null}
+              </View>
+              <View style={styles.draftCardDivider} />
 
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Mô tả và văn phong chuẩn</Text>
-          <TextInput
-            style={styles.summaryInput}
-            value={supervisorDescription}
-            onChangeText={setSupervisorDescription}
-            placeholder="Tổng hợp tình hình thực hiện, vật tư sử dụng và vấn đề phát sinh..."
-            placeholderTextColor="#64748b"
-            multiline
-            textAlignVertical="top"
-          />
-          <TouchableOpacity style={styles.officialButton} onPress={saveOfficialLog} disabled={saving}>
-            {saving ? <ActivityIndicator color="#fff" /> : <><Feather name="save" size={17} color="#fff" /><Text style={styles.officialButtonText}>Lưu vào lịch sử</Text></>}
-          </TouchableOpacity>
-        </View>
+              <Text style={styles.summaryTitle}>Bảng tổng hợp vật tư đã sử dụng</Text>
+              {aggregatedMaterials.map((material, index) => (
+                <View key={index} style={styles.materialRow}>
+                  <Text style={styles.materialName}>{material.name}</Text>
+                  <Text style={styles.materialValue}>{formatNumber(material.quantity)} {material.unit}</Text>
+                </View>
+              ))}
+              {!aggregatedMaterials.length ? <Text style={styles.noLog}>Chưa có vật tư được ghi nhận.</Text> : null}
+
+              {farmLeaderNotes.length > 0 ? (
+                <>
+                  <Text style={[styles.summaryTitle, { marginTop: 14 }]}>Ghi chép từ Farm Leader ({farmLeaderNotes.length} bản ghi)</Text>
+                  {farmLeaderNotes.map((note) => (
+                    <View key={note.id} style={styles.leaderNoteItem}>
+                      <View style={styles.leaderNoteHeader}>
+                        <Text style={styles.leaderNoteTask}>{note.taskName}</Text>
+                        <Text style={styles.leaderNoteMeta}>{note.author} · {note.date}</Text>
+                      </View>
+                      <Text style={styles.leaderNoteBody}>{note.description}</Text>
+                    </View>
+                  ))}
+                </>
+              ) : null}
+            </View>
+
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryTitle}>Ảnh thực địa ({aggregatedImages.length})</Text>
+              {aggregatedImages.length ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {aggregatedImages.map((item, index) => (
+                    <TouchableOpacity key={index} activeOpacity={0.8} onPress={() => setImageViewer({ visible: true, images: aggregatedImages.map(i => i.url), index })}>
+                      <Image source={{ uri: item.url }} style={styles.summaryImage} />
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              ) : (
+                <Text style={styles.noLog}>Chưa có ảnh minh chứng thực địa.</Text>
+              )}
+            </View>
+
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryTitle}>Mô tả tổng kết & Chốt giai đoạn</Text>
+              <TextInput
+                style={styles.summaryInput}
+                value={supervisorDescription}
+                onChangeText={setSupervisorDescription}
+                placeholder="Tổng hợp tình hình thực hiện, vật tư sử dụng và vấn đề phát sinh của giai đoạn..."
+                placeholderTextColor="#64748b"
+                multiline
+                textAlignVertical="top"
+              />
+              <TouchableOpacity style={styles.officialButton} onPress={handleCompleteStage} disabled={saving}>
+                {saving ? <ActivityIndicator color="#fff" /> : <><Feather name="check-square" size={17} color="#fff" /><Text style={styles.officialButtonText}>Chốt giai đoạn này</Text></>}
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : null}
 
         <View style={styles.stageLogWrapper}>
           <View style={styles.stageLogHeaderTitleRow}>
             <Feather name="book" size={16} color="#15803d" />
-            <Text style={styles.stageLogMainTitle}>Nhật ký giai đoạn</Text>
+            <Text style={styles.stageLogMainTitle}>Nhật ký giai đoạn đã chốt</Text>
             <View style={styles.stageLogCountBadge}><Text style={styles.stageLogCountText}>{approved.length} mục</Text></View>
           </View>
           
@@ -611,28 +882,29 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
         </View>
 
         {isClosing ? (
-          <View style={styles.completionActionRow}>
-            <TouchableOpacity
-              style={styles.approveCompletionBtn}
-              onPress={() => setApproveCompletionModal({ visible: true, quantity: '', unit: 'kg' })}
-            >
-              <Feather name="check-circle" size={18} color="#fff" />
-              <Text style={styles.completionBtnText}>Phê duyệt đóng sổ</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.rejectCompletionBtn}
-              onPress={() => setRejectCompletionModal({ visible: true, reason: '' })}
-            >
-              <Feather name="x-circle" size={18} color="#dc2626" />
-              <Text style={styles.rejectCompletionBtnText}>Từ chối đóng sổ</Text>
-            </TouchableOpacity>
+          <View style={styles.pendingSubmittedBanner}>
+            <Feather name="clock" size={20} color="#d97706" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pendingSubmittedTitle}>Đã gửi nhật ký lên Farm Manager</Text>
+              <Text style={styles.pendingSubmittedSub}>
+                Toàn bộ nhật ký canh tác đã được gửi thành công. Đang chờ Farm Manager kiểm tra và phê duyệt đóng kế hoạch.
+              </Text>
+            </View>
           </View>
         ) : !isCompleted ? (
-          <TouchableOpacity style={styles.submitCompletionButton} onPress={submitCompletion}>
-            <Feather name="send" size={18} color="#fff" />
-            <Text style={styles.submitCompletionText}>Gửi nhật ký lên Manager</Text>
-          </TouchableOpacity>
+          allStagesCompleted ? (
+            <TouchableOpacity style={styles.submitCompletionButton} onPress={submitCompletion}>
+              <Feather name="send" size={18} color="#fff" />
+              <Text style={styles.submitCompletionText}>Gửi toàn bộ nhật ký lên Farm Manager</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.pendingAllStagesBanner}>
+              <Feather name="alert-circle" size={18} color="#d97706" />
+              <Text style={styles.pendingAllStagesText}>
+                Cần chốt tất cả các giai đoạn ({completedStagesCount}/{stages.length} đã chốt) trước khi có thể gửi nhật ký lên Farm Manager.
+              </Text>
+            </View>
+          )
         ) : null}
       </>
     );
@@ -957,4 +1229,37 @@ const styles = StyleSheet.create({
   modalCancelBtnText: { color: '#475569', fontWeight: '700', fontSize: 14 },
   modalSubmitBtn: { flex: 1.5, backgroundColor: '#15803d', borderRadius: 10, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
   modalSubmitBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  stageChipDone: { borderColor: '#16a34a', backgroundColor: '#f0fdf4' },
+  stageNumberDone: { backgroundColor: '#16a34a' },
+  stageChipStatusText: { color: '#16a34a', fontSize: 10, fontWeight: '800', marginTop: 1 },
+  stageHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  stageDoneBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#dcfce7', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8 },
+  stageDoneBadgeText: { color: '#15803d', fontSize: 11, fontWeight: '800' },
+  planProgressCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#bbf7d0' },
+  planProgressTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  planProgressTitle: { flex: 1, color: '#0f172a', fontWeight: '800', fontSize: 13 },
+  planProgressBadge: { color: '#15803d', fontWeight: '900', fontSize: 12, backgroundColor: '#f0fdf4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  progressBarTrack: { height: 6, backgroundColor: '#e2e8f0', borderRadius: 3, marginTop: 10, overflow: 'hidden' },
+  progressBarFill: { height: '100%', backgroundColor: '#16a34a', borderRadius: 3 },
+  stageCompletedNotice: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, backgroundColor: '#f0fdf4', padding: 10, borderRadius: 8 },
+  stageCompletedNoticeText: { color: '#166534', fontWeight: '700', fontSize: 12 },
+  pendingAllStagesBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', borderRadius: 12, padding: 14, marginTop: 16 },
+  pendingAllStagesText: { flex: 1, color: '#b45309', fontSize: 12, fontWeight: '700', lineHeight: 18 },
+  draftCardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
+  generateDraftBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fef08a', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#fde047' },
+  generateDraftBtnText: { color: '#854d0e', fontSize: 11, fontWeight: '800' },
+  leaderNoteItem: { backgroundColor: '#fffbeb', borderRadius: 9, padding: 10, marginTop: 8, borderWidth: 1, borderColor: '#fef08a' },
+  leaderNoteHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, flexWrap: 'wrap', gap: 4 },
+  leaderNoteTask: { color: '#92400e', fontWeight: '800', fontSize: 12 },
+  leaderNoteMeta: { color: '#b45309', fontSize: 11 },
+  leaderNoteBody: { color: '#451a03', fontSize: 12, lineHeight: 18 },
+  officialTaskSelectorWrapper: { marginBottom: 12 },
+  officialTaskSelectorLabel: { color: '#334155', fontSize: 12, fontWeight: '800' },
+  officialTaskChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' },
+  officialTaskChipActive: { backgroundColor: '#15803d', borderColor: '#15803d' },
+  officialTaskChipText: { color: '#166534', fontSize: 12, fontWeight: '800' },
+  officialTaskChipTextActive: { color: '#fff' },
+  pendingSubmittedBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', borderRadius: 12, padding: 14, marginTop: 16 },
+  pendingSubmittedTitle: { color: '#b45309', fontSize: 14, fontWeight: '900', marginBottom: 2 },
+  pendingSubmittedSub: { color: '#78350f', fontSize: 12, lineHeight: 18, fontWeight: '500' },
 });

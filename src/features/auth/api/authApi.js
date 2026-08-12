@@ -53,6 +53,9 @@ const authApi = {
   logout: (refreshToken) => authSessionClient.post('/auth/logout', { refreshToken }),
   getCurrentUser: () => api.get('/auth/me'),
   changePassword: (values) => api.post('/auth/change-password', values),
+  forgotPassword: (identifier) => api.post('/auth/forgot-password', { identifier }),
+  verifyOtp: (identifier, otp) => api.post('/auth/verify-otp', { identifier, otp }),
+  resetPassword: (payload) => api.post('/auth/reset-password', payload),
 };
 
 export default authApi;
