@@ -134,7 +134,7 @@ GOOGLE_STT_API_KEY=your_google_stt_api_key
 npx expo start -c
 ```
 
-Mở ứng dụng **Expo Go** trên điện thoại và quét **mã QR** hiển thị trên terminal để trải nghiệm.
+Mở ứng dụng **Expo Go** trên điện thoại IOS và quét **mã QR** hiển thị trên terminal để trải nghiệm.
 
 ---
 
@@ -161,7 +161,6 @@ Sau khi hoàn tất, hệ thống sẽ trả về đường dẫn tải trực t
 
 | Thông tin | Giá trị |
 |---|---|
-| **Swagger API Docs** | https://api.eapls.io.vn/swagger/index.html |
 | **Tài khoản Giám sát (Farm Supervisor)** | `farmsupervisor_account1@eapls.com` |
 | **Mật khẩu** | `Abc@1234` |
 
