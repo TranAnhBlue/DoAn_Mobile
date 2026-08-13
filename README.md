@@ -36,16 +36,6 @@
 
 ---
 
-## 🏷️ Chuẩn Hóa Danh Xưng Vai Trò (Role Localization)
-
-Ứng dụng đã chuẩn hóa hiển thị danh xưng vai trò tiếng Việt đồng bộ trên toàn bộ màn hình:
-
-- `FARM_SUPERVISOR` ➔ **Giám sát trang trại**
-- `FARM_LEADER` / `FARMER_LEADER` ➔ **Tổ trưởng**
-- `FARMER` ➔ **Nông dân**
-
----
-
 ## 🛠️ Công Nghệ Sử Dụng
 
 | Nhóm | Thư viện / Công nghệ |
