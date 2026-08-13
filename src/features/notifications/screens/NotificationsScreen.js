@@ -6,7 +6,12 @@ import api from '../../../shared/api/client';
 import { extractItems, getEntityId } from '../../../shared/api/response';
 import { formatVietnamDateTime } from '../utils/dateTime';
 
+import { useAuthStore } from '../../auth/store/authStore';
+import { navigateToNotificationTarget } from '../utils/notificationRouter';
+
 export default function NotificationsScreen({ navigation }) {
+  const user = useAuthStore((state) => state.user);
+  const userRole = user?.role || user?.roles?.[0];
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ['notifications', 'mine'],
@@ -59,7 +64,7 @@ export default function NotificationsScreen({ navigation }) {
               activeOpacity={0.8}
               onPress={() => {
                 if (unread && id) markRead.mutate(id);
-                navigation.navigate('NotificationDetail', { notification: item });
+                navigateToNotificationTarget(item, navigation, userRole);
               }}
             >
               <View style={styles.icon}>

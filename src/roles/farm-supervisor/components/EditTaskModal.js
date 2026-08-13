@@ -16,18 +16,6 @@ import { extractItems, getApiErrorMessage, getEntityId } from '../../../shared/a
 import { valueOf } from '../../../shared/utils/data';
 import supervisorApi from '../api/supervisorApi';
 
-const ACTIVITY_TYPES = [
-  { id: 'LAND_PREPARATION', label: 'Làm đất', icon: 'layers' },
-  { id: 'PLANTING', label: 'Gieo trồng', icon: 'sun' },
-  { id: 'IRRIGATION', label: 'Tưới nước', icon: 'droplet' },
-  { id: 'FERTILIZATION', label: 'Bón phân', icon: 'disc' },
-  { id: 'PESTICIDE_APPLICATION', label: 'Phun nông dược', icon: 'shield' },
-  { id: 'INSPECTION', label: 'Kiểm tra', icon: 'check-square' },
-  { id: 'PRUNING', label: 'Cắt tỉa', icon: 'scissors' },
-  { id: 'HARVESTING', label: 'Thu hoạch', icon: 'shopping-bag' },
-  { id: 'OTHER', label: 'Khác', icon: 'grid' },
-];
-
 export default function EditTaskModal({ visible, task, users = [], onClose, onSuccess }) {
   const [taskName, setTaskName] = useState('');
   const [description, setDescription] = useState('');
@@ -70,7 +58,13 @@ export default function EditTaskModal({ visible, task, users = [], onClose, onSu
       setFarmerIds((Array.isArray(rawFarmerIds) ? rawFarmerIds : []).filter(Boolean));
       setSaving(false);
 
-      supervisorApi.getTaskCatalogs()
+      const cropId = valueOf(task?.cropId, task?.crop?.id, task?.cultivationPlan?.cropId, task?.plan?.cropId);
+      const cropCatalogId = valueOf(task?.cropCatalogId, task?.cropCatalog?.id, task?.cultivationPlan?.cropCatalogId, task?.plan?.cropCatalogId);
+      const params = {};
+      if (cropId) params.CropId = cropId;
+      if (cropCatalogId) params.CropCatalogId = cropCatalogId;
+
+      supervisorApi.getTaskCatalogs(params)
         .then((res) => setCatalogs(extractItems(res.data) || []))
         .catch(() => setCatalogs([]));
     }
@@ -99,7 +93,7 @@ export default function EditTaskModal({ visible, task, users = [], onClose, onSu
       name: taskName.trim(),
       taskName: taskName.trim(),
       description: description.trim() || undefined,
-      activityType: activityType,
+      activityType: activityType || 'OTHER',
       leaderId: leaderId || undefined,
       assignedLeaderId: leaderId || undefined,
       farmerIds: farmerIds.length ? farmerIds : undefined,
@@ -146,10 +140,10 @@ export default function EditTaskModal({ visible, task, users = [], onClose, onSu
             {/* Task Catalogs Suggestion Chips */}
             {catalogs.length > 0 ? (
               <View style={styles.catalogSection}>
-                <Text style={styles.labelSub}>Gợi ý công việc từ danh mục:</Text>
+                <Text style={styles.labelSub}>Công việc mẫu cho cây trồng này:</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                  {catalogs.slice(0, 8).map((cat) => (
-                    <TouchableOpacity key={cat.id} style={styles.catalogChip} onPress={() => handleSelectCatalog(cat)}>
+                  {catalogs.map((cat) => (
+                    <TouchableOpacity key={cat.id || cat.name} style={styles.catalogChip} onPress={() => handleSelectCatalog(cat)}>
                       <Feather name="plus" size={12} color="#15803d" />
                       <Text style={styles.catalogChipText}>{cat.name}</Text>
                     </TouchableOpacity>
@@ -171,26 +165,6 @@ export default function EditTaskModal({ visible, task, users = [], onClose, onSu
                 placeholder="Tên công việc..."
                 placeholderTextColor="#94a3b8"
               />
-            </View>
-
-            {/* Activity Type */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Loại hoạt động</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                {ACTIVITY_TYPES.map((type) => {
-                  const selected = activityType === type.id;
-                  return (
-                    <TouchableOpacity
-                      key={type.id}
-                      style={[styles.typeChip, selected && styles.typeChipActive]}
-                      onPress={() => setActivityType(type.id)}
-                    >
-                      <Feather name={type.icon} size={14} color={selected ? '#fff' : '#475569'} />
-                      <Text style={[styles.typeChipText, selected && styles.typeChipTextActive]}>{type.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
             </View>
 
             {/* Description */}
