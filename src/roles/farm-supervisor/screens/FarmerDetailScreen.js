@@ -101,7 +101,7 @@ export default function FarmerDetailScreen({ navigation, route }) {
         <View style={styles.profileCard}>
           {avatar ? <Image source={{ uri: avatar }} style={styles.avatar} /> : <View style={styles.avatarFallback}><Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text></View>}
           <Text style={styles.name}>{name}</Text>
-          <View style={styles.roles}>{roles.map((role) => <View key={role} style={styles.roleBadge}><Text style={styles.roleText}>{role === 'FARMER' ? 'Nông dân' : role === 'FARM_LEADER' ? 'Farm Leader' : role}</Text></View>)}</View>
+          <View style={styles.roles}>{roles.map((role) => <View key={role} style={styles.roleBadge}><Text style={styles.roleText}>{role === 'FARMER' ? 'Nông dân' : (role === 'FARM_LEADER' || role === 'LEADER') ? 'Tổ trưởng' : (role === 'FARM_SUPERVISOR' || role === 'SUPERVISOR') ? 'Giám sát trang trại' : role}</Text></View>)}</View>
           <View style={[styles.activeBadge, !user?.isActive && styles.inactiveBadge]}><Text style={[styles.activeText, !user?.isActive && styles.inactiveText]}>{user?.isActive ? 'Đang hoạt động' : 'Ngừng hoạt động'}</Text></View>
         </View>
 

@@ -20,6 +20,9 @@ const supervisorApi = {
   saveOfficialLog: (stageId, payload) => api.post(`/cultivation-stages/${stageId}/official-logs`, typeof payload === 'string' ? { supervisorDescription: payload } : payload),
   completeStage: (stageId) => api.post(`/cultivation-stages/${stageId}/complete`),
   submitCompletion: (logbookId) => api.post(`/cultivation-logbooks/${logbookId}/submit-completion`),
+  createTask: (payload) => api.post('/cultivation-tasks', payload),
+  bulkCreateTasks: (payload) => api.post('/cultivation-tasks/bulk', payload),
+  getTaskCatalogs: (params = {}) => api.get('/task-catalogs', { params: { PageIndex: 1, PageSize: 100, ...(typeof params === 'string' ? { CropId: params } : params) } }),
 };
 
 export default supervisorApi;

@@ -6,9 +6,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../auth/store/authStore';
 
 const ROLE_LABELS = {
-  FARMLEADER: 'Trưởng nhóm nông trại',
-  FARM_LEADER: 'Trưởng nhóm nông trại',
-  FarmLeader: 'Trưởng nhóm nông trại',
+  FARMER: 'Nông dân',
+  Farmer: 'Nông dân',
+  FARMLEADER: 'Tổ trưởng',
+  FARM_LEADER: 'Tổ trưởng',
+  FARMER_LEADER: 'Tổ trưởng',
+  FarmerLeader: 'Tổ trưởng',
+  FarmLeader: 'Tổ trưởng',
+  LEADER: 'Tổ trưởng',
+  Leader: 'Tổ trưởng',
+  FARMSUPERVISOR: 'Giám sát trang trại',
+  FARM_SUPERVISOR: 'Giám sát trang trại',
+  FarmSupervisor: 'Giám sát trang trại',
+  SUPERVISOR: 'Giám sát trang trại',
+  Supervisor: 'Giám sát trang trại',
 };
 
 const MENU_ITEMS = [
@@ -41,7 +52,7 @@ export default function ProfileScreen() {
   const navigation = useNavigation();
   const displayName = user?.fullname || user?.fullName || user?.username || 'Người dùng';
   const avatar = user?.avatar || user?.avatarUrl;
-  const role = ROLE_LABELS[user?.role] || ROLE_LABELS[String(user?.role || '').toUpperCase()] || user?.role || 'Farm Leader';
+  const role = ROLE_LABELS[user?.role] || ROLE_LABELS[String(user?.role || '').toUpperCase()] || user?.role || 'Tổ trưởng';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

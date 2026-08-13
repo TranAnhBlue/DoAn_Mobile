@@ -8,8 +8,11 @@ const LEGACY_ROLE_MAP = {
   FARMER: ROLES.FARMER,
   USER: ROLES.FARMER,
   FARM_LEADER: ROLES.FARM_LEADER,
+  FARMER_LEADER: ROLES.FARM_LEADER,
+  FARMLEADER: ROLES.FARM_LEADER,
   LEADER: ROLES.FARM_LEADER,
   FARM_SUPERVISOR: ROLES.FARM_SUPERVISOR,
+  FARMSUPERVISOR: ROLES.FARM_SUPERVISOR,
   SUPERVISOR: ROLES.FARM_SUPERVISOR,
 };
 
@@ -21,8 +24,8 @@ export const isFarmSupervisor = (role) => normalizeRole(role) === ROLES.FARM_SUP
 
 export const roleLabel = (role) => ({
   [ROLES.FARMER]: 'Nông dân',
-  [ROLES.FARM_LEADER]: 'Trưởng nhóm',
-  [ROLES.FARM_SUPERVISOR]: 'Giám sát nông trại',
+  [ROLES.FARM_LEADER]: 'Tổ trưởng',
+  [ROLES.FARM_SUPERVISOR]: 'Giám sát trang trại',
 }[normalizeRole(role)] || role || 'Thành viên');
 
 export default {

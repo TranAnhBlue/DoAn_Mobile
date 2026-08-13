@@ -90,7 +90,7 @@ export default function FarmersScreen({ navigation }) {
                   <Text style={styles.avatarText}>{(item.fullName || item.email || 'N').charAt(0).toUpperCase()}</Text>
                 </View>
               )}
-              <View style={styles.person}><Text style={styles.name}>{item.fullName || item.email}</Text><Text style={styles.contact}>{item.phoneNumber || item.email || 'Chưa có liên hệ'}</Text><View style={styles.tags}><View style={[styles.roleBadge, leader && styles.leaderBadge]}><Text style={[styles.roleText, leader && styles.leaderText]}>{leader ? 'Farm Leader' : 'Nông dân'}</Text></View><Text style={styles.taskCount}>{assignedCount(item.id)} việc được giao</Text></View></View>
+              <View style={styles.person}><Text style={styles.name}>{item.fullName || item.email}</Text><Text style={styles.contact}>{item.phoneNumber || item.email || 'Chưa có liên hệ'}</Text><View style={styles.tags}><View style={[styles.roleBadge, leader && styles.leaderBadge]}><Text style={[styles.roleText, leader && styles.leaderText]}>{leader ? 'Tổ trưởng' : 'Nông dân'}</Text></View><Text style={styles.taskCount}>{assignedCount(item.id)} việc được giao</Text></View></View>
               <View style={[styles.activeDot, !item.isActive && styles.inactiveDot]} />
               <Feather name="chevron-right" size={18} color="#94a3b8" style={styles.chevron} />
             </TouchableOpacity>

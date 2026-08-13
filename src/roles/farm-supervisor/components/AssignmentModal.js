@@ -55,11 +55,11 @@ export default function AssignmentModal({ visible, task, users, saving, onClose,
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
-              <Text style={styles.sectionTitle}>Trưởng nhóm thực hiện</Text>
-              <Text style={styles.help}>Chọn tối đa một Farm Leader.</Text>
+              <Text style={styles.sectionTitle}>Tổ trưởng thực hiện</Text>
+              <Text style={styles.help}>Chọn tối đa một Tổ trưởng.</Text>
               {leaders.length
-                ? leaders.map((item) => renderPerson(item, leaderId === item.id, () => setLeaderId(leaderId === item.id ? null : item.id), 'Farm Leader'))
-                : <Text style={styles.empty}>Chưa có tài khoản Farm Leader.</Text>}
+                ? leaders.map((item) => renderPerson(item, leaderId === item.id, () => setLeaderId(leaderId === item.id ? null : item.id), 'Tổ trưởng'))
+                : <Text style={styles.empty}>Chưa có tài khoản Tổ trưởng.</Text>}
 
               <Text style={[styles.sectionTitle, styles.farmerTitle]}>Nông dân tham gia</Text>
               <Text style={styles.help}>Có thể chọn nhiều nông dân cho cùng một công việc.</Text>

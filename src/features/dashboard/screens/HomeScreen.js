@@ -2,14 +2,14 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import api from '../../../shared/api/client';
 import { useAuthStore } from '../../auth/store/authStore';
@@ -19,10 +19,12 @@ const FARM_DARK = '#27c65a';
 const FARM = '#27c65a';
 
 const ROLE_LABELS = {
-  Admin:   'Quản trị viên', ADMIN:   'Quản trị viên',
-  Farmer:  'Nông dân',      FARMER:  'Nông dân',
-  HTX:     'Hợp tác xã',   Htx:     'Hợp tác xã',
-  User:    'Thành viên',   USER:    'Thành viên',
+  Admin: 'Quản trị viên', ADMIN: 'Quản trị viên',
+  Farmer: 'Nông dân', FARMER: 'Nông dân',
+  FarmLeader: 'Tổ trưởng', FARM_LEADER: 'Tổ trưởng', FARMER_LEADER: 'Tổ trưởng', FARMLEADER: 'Tổ trưởng', LEADER: 'Tổ trưởng',
+  FarmSupervisor: 'Giám sát trang trại', FARM_SUPERVISOR: 'Giám sát trang trại', SUPERVISOR: 'Giám sát trang trại',
+  HTX: 'Hợp tác xã', Htx: 'Hợp tác xã',
+  User: 'Thành viên', USER: 'Thành viên',
 };
 
 export default function HomeScreen({ navigation }) {
