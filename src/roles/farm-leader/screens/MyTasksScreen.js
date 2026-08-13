@@ -951,21 +951,58 @@ export default function MyTasksScreen({ navigation, route }) {
   };
 
   useEffect(() => {
-    const focusTaskId = route?.params?.focusTaskId;
-    if (!focusTaskId || !tasks.length) return;
-    const focusedTask = tasks.find((task) => getEntityId(task) === focusTaskId);
-    if (!focusedTask) return;
+    const { focusTaskId, focusPlanId, focusTaskName, focusPlanName } = route?.params || {};
+    if (!focusTaskId && !focusPlanId && !focusTaskName && !focusPlanName) return;
+    if (!plans.length) return;
 
-    const taskPlan = plans.find((p) => p.tasks.some((t) => getEntityId(t) === focusTaskId));
-    if (taskPlan) {
-      setSelectedPlan(taskPlan);
+    // 1. Tìm kế hoạch tương ứng
+    let matchedPlan = null;
+    if (focusPlanId) {
+      matchedPlan = plans.find((p) => String(p.id) === String(focusPlanId));
+    }
+    if (!matchedPlan && focusTaskId) {
+      matchedPlan = plans.find((p) => p.tasks && p.tasks.some((t) => String(getEntityId(t)) === String(focusTaskId)));
+    }
+    if (!matchedPlan && focusTaskName) {
+      matchedPlan = plans.find((p) => p.tasks && p.tasks.some((t) => (t.name || '').toLowerCase().includes(focusTaskName.toLowerCase())));
+    }
+    if (!matchedPlan && focusPlanName) {
+      matchedPlan = plans.find((p) => (p.name || '').toLowerCase().includes(focusPlanName.toLowerCase()));
     }
 
-    const status = String(focusedTask.status || '').toUpperCase();
-    if (['ACTIVE', 'IN_PROGRESS'].includes(status)) openEntry(focusedTask, 'daily');
-    else if (status === 'COMPLETED') openEntry(focusedTask, 'summary');
-    navigation?.setParams?.({ focusTaskId: undefined });
-  }, [navigation, route?.params?.focusTaskId, tasks, plans]);
+    if (matchedPlan) {
+      setSelectedPlan(matchedPlan);
+    }
+
+    // 2. Tìm công việc tương ứng để mở chi tiết
+    let matchedTask = null;
+    const allTasks = matchedPlan ? matchedPlan.tasks : tasks;
+
+    if (focusTaskId) {
+      matchedTask = allTasks.find((t) => String(getEntityId(t)) === String(focusTaskId));
+    }
+    if (!matchedTask && focusTaskName) {
+      matchedTask = allTasks.find((t) => (t.name || '').toLowerCase().includes(focusTaskName.toLowerCase()));
+    }
+
+    if (matchedTask) {
+      setDetailTask(matchedTask);
+    } else if (focusTaskId) {
+      api.get(`/cultivation-tasks/${focusTaskId}`)
+        .then((res) => {
+          const d = unwrapPayload(res.data) || res.data?.data || res.data;
+          if (d && (d.id || d.name)) setDetailTask(d);
+        })
+        .catch(() => {});
+    }
+
+    navigation?.setParams?.({
+      focusTaskId: undefined,
+      focusPlanId: undefined,
+      focusTaskName: undefined,
+      focusPlanName: undefined,
+    });
+  }, [navigation, route?.params, tasks, plans]);
 
   const submitEntry = async () => {
     if (!description.trim()) {
@@ -1041,7 +1078,15 @@ export default function MyTasksScreen({ navigation, route }) {
     return true;
   });
 
-  const planQuarantineSummary = getPlanQuarantineSummary(currentTasksList);
+  const planTasksForQuarantine = selectedPlan
+    ? (selectedPlan.tasks && selectedPlan.tasks.length ? selectedPlan.tasks : tasks.filter((t) => {
+      const pId = String(t.cultivationLogbookId || t.logbookId || t.planId || '');
+      const pName = String(valueOf(t.planName, t.logbookName, t.cropName, '') || '').toLowerCase();
+      return pId === String(selectedPlan.id) || pName === String(selectedPlan.name || '').toLowerCase();
+    }))
+    : tasks;
+
+  const planQuarantineSummary = getPlanQuarantineSummary(planTasksForQuarantine);
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#15803d" /></View>;
 

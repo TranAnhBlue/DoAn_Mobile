@@ -94,6 +94,21 @@ export function getTaskQuarantineWarning(task = {}, history = []) {
   const taskName = String(task.taskName || task.name || task.title || '').toLowerCase();
   const isHarvest = activityType === 'HARVESTING' || taskName.includes('thu hoạch') || taskName.includes('harvest');
 
+  // Check array quarantineWarnings directly from backend
+  const qWarnings = task.quarantineWarnings || task.quarantineWarningList || task.quarantines;
+  if (Array.isArray(qWarnings) && qWarnings.length > 0) {
+    const first = qWarnings[0];
+    const name = first.pesticideName || first.name || first.tradeName || 'Nông dược';
+    const dateFormatted = first.eligibleDate ? formatDateVN(first.eligibleDate) : '';
+    return {
+      hasWarning: true,
+      isHarvest,
+      message: `Đang trong thời gian cách ly nông dược (${name}). Cách ly đến: ${dateFormatted}`,
+      eligibleDate: dateFormatted,
+      daysRemaining: first.quarantineDays ?? null,
+    };
+  }
+
   // Direct backend warning fields
   const inlineWarning = task.inlineQuarantineWarnings || task.quarantineWarning || task.quarantineNotice;
   if (inlineWarning) {
@@ -115,43 +130,88 @@ export function getTaskQuarantineWarning(task = {}, history = []) {
   };
 }
 
-/**
- * Aggregates all quarantined pesticides for a plan's tasks.
- */
 export function getPlanQuarantineSummary(tasks = [], history = []) {
-  const items = [];
-  const seenNames = new Set();
+  const map = new Map();
 
-  tasks.forEach((t) => {
-    const warn = getTaskQuarantineWarning(t, history);
+  (Array.isArray(tasks) ? tasks : []).forEach((t) => {
+    // 1. Check array quarantineWarnings from backend (e.g. [{ pesticideName: 'Nova 70WP', quarantineDays: 7, eligibleDate: '...' }])
+    const qWarnings = t.quarantineWarnings || t.quarantineWarningList || t.quarantines;
+    let handled = false;
+
+    if (Array.isArray(qWarnings) && qWarnings.length > 0) {
+      qWarnings.forEach((qw) => {
+        const name = qw.pesticideName || qw.name || qw.tradeName || 'Nông dược';
+        const rawDate = qw.eligibleDate || qw.quarantineUntil || qw.safeHarvestDate;
+        const eligibleDateStr = rawDate ? formatDateVN(rawDate) : (qw.eligibleDate || 'Đang cách ly');
+
+        if (name) {
+          handled = true;
+          if (map.has(name)) {
+            const existing = map.get(name);
+            if (rawDate && existing.rawDate && new Date(rawDate) > new Date(existing.rawDate)) {
+              existing.eligibleDate = eligibleDateStr;
+              existing.rawDate = rawDate;
+              existing.daysRemaining = qw.quarantineDays ?? existing.daysRemaining;
+            }
+          } else {
+            map.set(name, {
+              name,
+              eligibleDate: eligibleDateStr,
+              rawDate,
+              daysRemaining: qw.quarantineDays ?? null,
+            });
+          }
+        }
+      });
+    }
+
+    // 2. Check itemPesticides
     const itemPesticides = t.pesticides || t.quarantinePesticides || t.materials?.pesticides || [];
-
-    if (Array.isArray(itemPesticides) && itemPesticides.length > 0) {
+    if (!handled && Array.isArray(itemPesticides) && itemPesticides.length > 0) {
       itemPesticides.forEach((p) => {
         const name = p.name || p.pesticideName || p.tradeName || 'Nông dược';
         const rawDate = p.eligibleDate || p.quarantineUntil || p.safeHarvestDate || t.eligibleDate || t.quarantineEligibleDate || t.safeHarvestDate;
-        const eligibleDateStr = rawDate ? formatDateVN(rawDate) : warn.eligibleDate;
-        if (name && !seenNames.has(name)) {
-          seenNames.add(name);
-          items.push({
+        const eligibleDateStr = rawDate ? formatDateVN(rawDate) : 'Đang cách ly';
+
+        if (name) {
+          handled = true;
+          if (map.has(name)) {
+            const existing = map.get(name);
+            if (rawDate && existing.rawDate && new Date(rawDate) > new Date(existing.rawDate)) {
+              existing.eligibleDate = eligibleDateStr;
+              existing.rawDate = rawDate;
+              existing.daysRemaining = p.quarantineDays ?? existing.daysRemaining;
+            }
+          } else {
+            map.set(name, {
+              name,
+              eligibleDate: eligibleDateStr,
+              rawDate,
+              daysRemaining: p.quarantineDays ?? null,
+            });
+          }
+        }
+      });
+    }
+
+    // 3. Check calculated eligibility only if not already handled
+    if (!handled) {
+      const warn = getTaskQuarantineWarning(t, history);
+      if (warn.hasWarning && warn.eligibleDate) {
+        const name = t.pesticideName || t.quarantinePesticide || warn.pesticideName || 'Nông dược';
+        if (!map.has(name)) {
+          map.set(name, {
             name,
-            eligibleDate: eligibleDateStr || 'Đang cách ly',
+            eligibleDate: warn.eligibleDate,
+            rawDate: null,
             daysRemaining: warn.daysRemaining ?? null,
           });
         }
-      });
-    } else if (warn.hasWarning) {
-      const name = t.pesticideName || t.quarantinePesticide || 'Nova 70WP';
-      if (!seenNames.has(name)) {
-        seenNames.add(name);
-        items.push({
-          name,
-          eligibleDate: warn.eligibleDate || '20/08/2026',
-          daysRemaining: warn.daysRemaining ?? null,
-        });
       }
     }
   });
+
+  const items = Array.from(map.values());
 
   return {
     hasQuarantine: items.length > 0,
