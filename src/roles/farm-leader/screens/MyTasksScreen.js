@@ -313,7 +313,12 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
                   <Feather name="check-circle" size={15} color="#fff" />
                   <Text style={ds.heroSummaryBtnText}>Hoàn thành & Gửi Summary</Text>
                 </TouchableOpacity>
-              ) : null}
+              ) : (
+                <TouchableOpacity style={[ds.heroSummaryBtn, { backgroundColor: '#d97706' }]} onPress={() => setSummaryModalVisible(true)}>
+                  <Feather name="file-text" size={15} color="#fff" />
+                  <Text style={ds.heroSummaryBtnText}>Xem báo cáo tổng hợp đã gửi</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Info cards */}
@@ -1035,12 +1040,18 @@ export default function MyTasksScreen({ navigation, route }) {
       fetchTasks();
     } catch (requestError) {
       const serverMsg = getApiErrorMessage(requestError, '');
-      if (serverMsg && (serverMsg.includes('cách ly') || serverMsg.includes('quarantine') || serverMsg.includes('Safe-super'))) {
+      const isQuarantineError = serverMsg && (
+        serverMsg.toLowerCase().includes('cách ly') ||
+        serverMsg.toLowerCase().includes('quarantine') ||
+        serverMsg.toLowerCase().includes('safe-super') ||
+        serverMsg.toLowerCase().includes('thời gian cách ly')
+      );
+      if (isQuarantineError) {
         Alert.alert('Cảnh báo thời gian cách ly ⚠️', serverMsg);
-      } else if (serverMsg && serverMsg.includes('nhật ký')) {
+      } else if (serverMsg) {
         Alert.alert('Chưa thể gửi tổng hợp ⚠️', serverMsg);
       } else {
-        Alert.alert('Cảnh báo thời gian cách ly ⚠️', serverMsg || 'Chưa đủ ngày cách ly để gửi Summary.');
+        Alert.alert('Lỗi hệ thống ⚠️', 'Không thể gửi báo cáo tổng hợp. Vui lòng kiểm tra kết nối mạng và thử lại.');
       }
     } finally {
       setSaving(false);
@@ -1297,27 +1308,34 @@ export default function MyTasksScreen({ navigation, route }) {
               </View>
 
               <View style={styles.actions}>
-                <TouchableOpacity
-                  style={styles.detailBtn}
-                  onPress={() => setDetailTask(item)}
-                >
-                  <Feather name="eye" size={14} color="#15803d" />
-                  <Text style={styles.detailBtnText}>Xem chi tiết</Text>
-                </TouchableOpacity>
-                {canWriteLog ? (
+                {state === 'PENDING_APPROVAL' ? (
                   <TouchableOpacity
-                    style={styles.logBtn}
-                    onPress={() => openEntry(item, 'daily')}
+                    style={[styles.logBtn, { backgroundColor: '#d97706', flex: 1, justifyContent: 'center' }]}
+                    onPress={() => setDetailTask(item)}
                   >
-                    <Feather name="edit-3" size={14} color="#fff" />
-                    <Text style={styles.logBtnText}>Ghi nhật ký</Text>
-                  </TouchableOpacity>
-                ) : state === 'PENDING_APPROVAL' ? (
-                  <View style={[styles.logBtn, { backgroundColor: '#d97706' }]}>
                     <Feather name="clock" size={14} color="#fff" />
                     <Text style={styles.logBtnText}>Chờ duyệt</Text>
-                  </View>
-                ) : null}
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={styles.detailBtn}
+                      onPress={() => setDetailTask(item)}
+                    >
+                      <Feather name="eye" size={14} color="#15803d" />
+                      <Text style={styles.detailBtnText}>Xem chi tiết</Text>
+                    </TouchableOpacity>
+                    {canWriteLog ? (
+                      <TouchableOpacity
+                        style={styles.logBtn}
+                        onPress={() => openEntry(item, 'daily')}
+                      >
+                        <Feather name="edit-3" size={14} color="#fff" />
+                        <Text style={styles.logBtnText}>Ghi nhật ký</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </>
+                )}
               </View>
             </TouchableOpacity>
           );

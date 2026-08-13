@@ -23,9 +23,39 @@ import {
 
 import api from '../../../shared/api/client';
 import { getApiErrorMessage, getEntityId } from '../../../shared/api/response';
-import { valueOf } from '../../../shared/utils/data';
+import { normalizeStatus, valueOf } from '../../../shared/utils/data';
 import { formatDateVN, resolveAvatarUrl } from '../../../shared/utils/format';
 import { aggregateMaterials } from '../utils/aggregateMaterials';
+
+const extractQuarantineMessage = (d) => {
+  if (!d) return '';
+  if (typeof d === 'string') {
+    const s = d.toLowerCase();
+    if (s.includes('cách ly') || s.includes('quarantine') || s.includes('safe-super') || s.includes('thời gian cách ly')) {
+      return d;
+    }
+    return '';
+  }
+  const qMsg = valueOf(
+    d.quarantineWarning,
+    d.quarantineError,
+    d.quarantineMessage,
+    d.quarantineNotice,
+    d.isQuarantineValid === false ? (d.quarantineMessage || d.message || d.note || 'Nông dược đã phun chưa đủ số ngày cách ly an toàn.') : null
+  );
+  if (qMsg) return String(qMsg);
+  if (d.hasQuarantineWarning === true || d.inQuarantine === true) {
+    return String(d.message || d.warning || d.note || 'Nông dược đã phun chưa đủ số ngày cách ly an toàn.');
+  }
+  const generalMsg = valueOf(d.message, d.note, d.warning, d.error, d.description);
+  if (generalMsg) {
+    const str = String(generalMsg).toLowerCase();
+    if (str.includes('cách ly') || str.includes('quarantine') || str.includes('safe-super') || str.includes('thời gian cách ly')) {
+      return String(generalMsg);
+    }
+  }
+  return '';
+};
 
 export default function SummaryReportModal({ visible, task, history, onClose, onSuccess }) {
   const [saving, setSaving] = useState(false);
@@ -58,12 +88,7 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
           const d = res.data?.data || res.data || {};
           if (d) {
             foundSummary = d;
-            const qMsg = valueOf(
-              d.quarantineWarning,
-              d.quarantineError,
-              d.quarantineMessage,
-              d.isQuarantineValid === false ? d.message : null
-            );
+            const qMsg = extractQuarantineMessage(d);
             if (qMsg) foundQuarantineError = qMsg;
             if (
               d.fertilizers || d.totalFertilizers || d.pesticides || d.totalPesticides ||
@@ -74,8 +99,9 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
           }
         } catch (err) {
           const msg = getApiErrorMessage(err, '');
-          if (msg && (msg.includes('cách ly') || msg.includes('quarantine'))) {
-            foundQuarantineError = msg;
+          const qMsg = extractQuarantineMessage(msg) || extractQuarantineMessage(err?.response?.data);
+          if (qMsg) {
+            foundQuarantineError = qMsg;
           }
         }
       }
@@ -143,16 +169,7 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
   });
 
   // ── Submit handler ────────────────────────────────────────────────────────
-  const handleSubmit = async () => {
-    if (!summaryNote.trim()) {
-      Alert.alert('Thiếu thông tin ⚠️', 'Vui lòng nhập Mô tả tổng kết công việc trước khi gửi.');
-      return;
-    }
-    if (quarantineError) {
-      Alert.alert('Chưa đủ thời gian cách ly ⚠️', 'Vui lòng chờ đủ số ngày cách ly trước khi gửi báo cáo hoàn thành.');
-      return;
-    }
-
+  const executeSubmit = async () => {
     setSaving(true);
 
     const body = {
@@ -189,10 +206,11 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
         lastError = err;
         const status = err?.response?.status;
         const serverMsg = getApiErrorMessage(err, '');
-        if (serverMsg && (serverMsg.includes('cách ly') || serverMsg.includes('quarantine') || serverMsg.includes('Safe-super'))) {
-          setQuarantineError(serverMsg);
+        const qMsg = extractQuarantineMessage(serverMsg) || extractQuarantineMessage(err?.response?.data);
+        if (qMsg) {
+          setQuarantineError(qMsg);
           setSaving(false);
-          Alert.alert('Chưa đủ thời gian cách ly ⚠️', serverMsg);
+          Alert.alert('Chưa đủ thời gian cách ly ⚠️', qMsg);
           return;
         }
         if (status !== 404 && status !== 405) break;
@@ -207,18 +225,46 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
       ]);
     } else {
       const errorMsg = getApiErrorMessage(lastError, '');
-      if (errorMsg && (errorMsg.includes('cách ly') || errorMsg.includes('quarantine') || errorMsg.includes('Safe-super'))) {
-        setQuarantineError(errorMsg);
-        Alert.alert('Chưa đủ thời gian cách ly ⚠️', errorMsg);
+      const qMsg = extractQuarantineMessage(errorMsg) || extractQuarantineMessage(lastError?.response?.data);
+      if (qMsg) {
+        setQuarantineError(qMsg);
+        Alert.alert('Chưa đủ thời gian cách ly ⚠️', qMsg);
       } else if (errorMsg) {
         Alert.alert('Thông báo ⚠️', errorMsg);
       } else {
-        Alert.alert('Đã gửi báo cáo 🎉', 'Báo cáo tổng hợp công việc đã được gửi thành công!', [
-          { text: 'OK', onPress: () => onSuccess?.() },
-        ]);
+        Alert.alert('Lỗi gửi báo cáo ⚠️', 'Không thể gửi bản tổng hợp công việc. Vui lòng kiểm tra lại kết nối và dữ liệu.');
       }
     }
   };
+
+  const handleSubmit = async () => {
+    if (!summaryNote.trim()) {
+      Alert.alert('Thiếu thông tin ⚠️', 'Vui lòng nhập Mô tả tổng kết công việc trước khi gửi.');
+      return;
+    }
+
+    if (quarantineError) {
+      Alert.alert(
+        'Cảnh báo thời gian cách ly ⚠️',
+        `${quarantineError}\n\nBạn có chắc chắn vẫn muốn gửi báo cáo tổng hợp này?`,
+        [
+          { text: 'Hủy', style: 'cancel' },
+          { text: 'Vẫn gửi báo cáo', onPress: () => executeSubmit() },
+        ]
+      );
+      return;
+    }
+
+    executeSubmit();
+  };
+
+  const isAlreadySubmitted =
+    normalizeStatus(task) === 'PENDING_APPROVAL' ||
+    normalizeStatus(task) === 'COMPLETED' ||
+    !!task?.descriptionSummary ||
+    !!task?.summaryDescription ||
+    !!serverSummary?.descriptionSummary ||
+    !!serverSummary?.summaryDescription;
 
   if (!visible) return null;
 
@@ -230,9 +276,11 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
               <View style={styles.headerIconCircle}>
-                <Feather name="send" size={14} color="#15803d" />
+                <Feather name={isAlreadySubmitted ? "file-text" : "send"} size={14} color="#15803d" />
               </View>
-              <Text style={styles.headerTitle}>Tạo Summary & Gửi báo cáo hoàn thành</Text>
+              <Text style={styles.headerTitle}>
+                {isAlreadySubmitted ? 'Chi tiết Báo cáo tổng hợp đã gửi' : 'Tạo Summary & Gửi báo cáo hoàn thành'}
+              </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={8}>
               <Feather name="x" size={20} color="#64748b" />
@@ -387,15 +435,16 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
             {/* Summary description */}
             <View style={styles.descSection}>
               <Text style={styles.descLabel}>
-                <Text style={{ color: '#ef4444' }}>* </Text>
+                {!isAlreadySubmitted ? <Text style={{ color: '#ef4444' }}>* </Text> : null}
                 Mô tả tổng kết công việc
-                <Text style={{ color: '#ef4444' }}> *</Text>
+                {!isAlreadySubmitted ? <Text style={{ color: '#ef4444' }}> *</Text> : null}
               </Text>
               <TextInput
-                style={styles.descTextarea}
+                style={[styles.descTextarea, isAlreadySubmitted && styles.descTextareaReadOnly]}
                 value={summaryNote}
                 onChangeText={setSummaryNote}
-                placeholder="VD: Đã hoàn thành công việc phun nông dược theo kế hoạch, cây trồng phát triển tốt..."
+                editable={!isAlreadySubmitted}
+                placeholder={isAlreadySubmitted ? 'Chưa có mô tả tổng kết' : 'VD: Đã hoàn thành công việc phun nông dược theo kế hoạch, cây trồng phát triển tốt...'}
                 placeholderTextColor="#94a3b8"
                 multiline
                 textAlignVertical="top"
@@ -405,14 +454,26 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
           </ScrollView>
 
           {/* Footer */}
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={saving}>
-              <Text style={styles.cancelBtnText}>Hủy</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} disabled={saving}>
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Xác nhận gửi báo cáo</Text>}
-            </TouchableOpacity>
-          </View>
+          {isAlreadySubmitted ? null : (
+            <View style={styles.footer}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={saving}>
+                <Text style={styles.cancelBtnText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitBtn, quarantineError ? styles.submitBtnWarning : null]}
+                onPress={handleSubmit}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.submitBtnText}>
+                    {quarantineError ? 'Vẫn gửi (có cảnh báo ⚠️)' : 'Xác nhận gửi báo cáo'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </KeyboardAvoidingView>
     </View>
@@ -467,9 +528,11 @@ const styles = StyleSheet.create({
   descSection:          { gap: 8 },
   descLabel:            { fontSize: 13, fontWeight: '700', color: '#1e293b' },
   descTextarea:         { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, padding: 12, fontSize: 13, color: '#1e293b', minHeight: 90, backgroundColor: '#fff' },
+  descTextareaReadOnly: { backgroundColor: '#f8fafc', color: '#334155', borderColor: '#e2e8f0' },
   footer:               { flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#f1f5f9', backgroundColor: '#fff' },
   cancelBtn:            { flex: 1, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
   cancelBtnText:        { fontSize: 14, fontWeight: '700', color: '#475569' },
   submitBtn:            { flex: 2, backgroundColor: '#15803d', borderRadius: 10, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  submitBtnWarning:     { backgroundColor: '#d97706' },
   submitBtnText:        { fontSize: 14, fontWeight: '800', color: '#fff' },
 });

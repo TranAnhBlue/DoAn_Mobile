@@ -11,8 +11,12 @@ import AssignmentModal from '../components/AssignmentModal';
 const STATUS = {
   PENDING: ['Chờ kích hoạt', '#64748b'],
   PLANNED: ['Đã lên lịch', '#2563eb'],
-  ACTIVE: ['Đang hoạt động', '#15803d'],
+  ASSIGNED: ['Đã phân công', '#2563eb'],
+  ASSIGNED_LEADER: ['Đã phân công', '#2563eb'],
+  ACTIVE: ['Đang thực hiện', '#15803d'],
   IN_PROGRESS: ['Đang thực hiện', '#15803d'],
+  WAITING_APPROVAL: ['Chờ duyệt', '#d97706'],
+  PENDING_APPROVAL: ['Chờ duyệt', '#d97706'],
   COMPLETED: ['Hoàn thành', '#059669'],
   CANCELLED: ['Đã hủy', '#64748b'],
 };
@@ -114,7 +118,7 @@ export default function SupervisorTaskDetailScreen({ navigation, route }) {
         </View>
         <View style={styles.card}>
           <TouchableOpacity style={styles.personRow} disabled={!task?.assignedLeaderId} onPress={() => navigation.navigate('FarmerDetail', { userId: task.assignedLeaderId })}>
-            <View style={styles.leaderIcon}><Feather name="user-check" size={18} color="#1d4ed8" /></View><View style={styles.personText}><Text style={styles.personRole}>Farm Leader</Text><Text style={styles.personName}>{task?.assignedLeaderName || 'Chưa phân công'}</Text></View>{task?.assignedLeaderId ? <Feather name="chevron-right" size={18} color="#94a3b8" /> : null}
+            <View style={styles.leaderIcon}><Feather name="user-check" size={18} color="#1d4ed8" /></View><View style={styles.personText}><Text style={styles.personRole}>Tổ trưởng</Text><Text style={styles.personName}>{task?.assignedLeaderName || 'Chưa phân công'}</Text></View>{task?.assignedLeaderId ? <Feather name="chevron-right" size={18} color="#94a3b8" /> : null}
           </TouchableOpacity>
           {assignments.map((assignment, index) => {
             const userId = assignmentUserId(assignment);

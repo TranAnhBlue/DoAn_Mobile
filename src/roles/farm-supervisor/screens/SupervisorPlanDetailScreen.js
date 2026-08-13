@@ -20,6 +20,8 @@ import { extractItems, getApiErrorMessage, getEntityId, unwrapPayload } from '..
 import { formatNumber, resolveAvatarUrl } from '../../../shared/utils/format';
 import supervisorApi from '../api/supervisorApi';
 import AssignmentModal from '../components/AssignmentModal';
+import CreateTaskModal from '../components/CreateTaskModal';
+import InlineStageTaskForm from '../components/InlineStageTaskForm';
 
 const TABS = [
   ['tasks', 'Quản lý công việc', 'check-square'],
@@ -30,9 +32,13 @@ const TABS = [
 const STATUS = {
   PENDING: ['Chờ kích hoạt', '#64748b'],
   PLANNED: ['Đã lên lịch', '#2563eb'],
-  ACTIVE: ['Đang hoạt động', '#2563eb'],
-  IN_PROGRESS: ['Đang thực hiện', '#2563eb'],
-  COMPLETED: ['Hoàn thành', '#15803d'],
+  ASSIGNED: ['Đã phân công', '#2563eb'],
+  ASSIGNED_LEADER: ['Đã phân công', '#2563eb'],
+  ACTIVE: ['Đang thực hiện', '#15803d'],
+  IN_PROGRESS: ['Đang thực hiện', '#15803d'],
+  WAITING_APPROVAL: ['Chờ duyệt', '#d97706'],
+  PENDING_APPROVAL: ['Chờ duyệt', '#d97706'],
+  COMPLETED: ['Hoàn thành', '#059669'],
   CANCELLED: ['Đã hủy', '#64748b'],
 };
 
@@ -74,6 +80,8 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
   const [approveCompletionModal, setApproveCompletionModal] = useState({ visible: false, quantity: '', unit: 'kg' });
   const [rejectCompletionModal, setRejectCompletionModal] = useState({ visible: false, reason: '' });
   const [imageViewer, setImageViewer] = useState({ visible: false, images: [], index: 0 });
+  const [createTaskModalVisible, setCreateTaskModalVisible] = useState(false);
+  const [inlineFormOpen, setInlineFormOpen] = useState(false);
 
   const fetchDetail = useCallback(async () => {
     if (!planId) return;
@@ -256,7 +264,7 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
         const desc = valueOf(log.description, log.notes, log.content, '').trim();
         const author = valueOf(
           log.creatorName, log.createdByName, log.authorName,
-          log.user?.fullname, log.user?.fullName, log.createdUser?.fullName, log.workerName, 'Farm Leader'
+          log.user?.fullname, log.user?.fullName, log.createdUser?.fullName, log.workerName, 'Tổ trưởng'
         );
         const date = dateLabel(valueOf(log.date, log.createdAt, log.performedAt));
 
@@ -276,7 +284,7 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
 
   const generateDraftDescriptionFromLogs = useCallback(() => {
     if (!farmLeaderNotes.length) {
-      Alert.alert('Chưa có ghi chép', 'Chưa có nhật ký ghi chép thực địa từ Farm Leader cho giai đoạn này.');
+      Alert.alert('Chưa có ghi chép', 'Chưa có nhật ký ghi chép thực địa từ Tổ trưởng cho giai đoạn này.');
       return;
     }
     const combined = farmLeaderNotes
@@ -532,27 +540,47 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
           <TouchableOpacity key={getEntityId(task)} style={styles.taskCard} activeOpacity={0.8} onPress={() => navigation.navigate('SupervisorTaskDetail', { taskId: getEntityId(task), task })}>
             <View style={styles.taskTop}><Text style={styles.taskName}>{task.name}</Text><View style={[styles.statusBadge, { backgroundColor: `${color}18` }]}><Text style={[styles.statusText, { color }]}>{label}</Text></View><Feather name="chevron-right" size={18} color="#94a3b8" /></View>
             {task.description ? <Text style={styles.taskDescription}>{task.description}</Text> : null}
-            <View style={styles.assignmentLine}><Feather name="users" size={14} color="#15803d" /><Text style={styles.assignmentText}>{task.assignedLeaderName || 'Chưa có Farm Leader'}{assignmentCount ? ` · ${assignmentCount} nông dân` : ''}</Text></View>
-            {!['COMPLETED', 'CANCELLED'].includes(state) || ['PENDING', 'PLANNED'].includes(state) ? (
+            <View style={styles.assignmentLine}><Feather name="users" size={14} color="#15803d" /><Text style={styles.assignmentText}>{task.assignedLeaderName || 'Chưa có Tổ trưởng'}{assignmentCount ? ` · ${assignmentCount} nông dân` : ''}</Text></View>
+            {!['COMPLETED', 'CANCELLED', 'IN_PROGRESS'].includes(state) ? (
               <View style={styles.taskActions}>
-                {!['COMPLETED', 'CANCELLED'].includes(state) ? (
-                  <TouchableOpacity style={[styles.taskButton, styles.assignButton]} onPress={(event) => { event.stopPropagation(); setSelectedTask(task); }}>
-                    <Feather name="user-plus" size={15} color="#2563eb" />
-                    <Text style={styles.assignText}>Phân công</Text>
-                  </TouchableOpacity>
-                ) : null}
-                {['PENDING', 'PLANNED'].includes(state) ? (
-                  <TouchableOpacity style={[styles.taskButton, styles.startButton]} onPress={(event) => { event.stopPropagation(); startTask(task); }}>
-                    <Feather name="play" size={15} color="#fff" />
-                    <Text style={styles.startText}>Kích hoạt</Text>
-                  </TouchableOpacity>
-                ) : null}
+                <TouchableOpacity style={[styles.taskButton, styles.assignButton]} onPress={(event) => { event.stopPropagation(); setSelectedTask(task); }}>
+                  <Feather name="user-plus" size={15} color="#2563eb" />
+                  <Text style={styles.assignText}>Phân công</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.taskButton, styles.startButton]} onPress={(event) => { event.stopPropagation(); startTask(task); }}>
+                  <Feather name="play" size={15} color="#fff" />
+                  <Text style={styles.startText}>Kích hoạt</Text>
+                </TouchableOpacity>
               </View>
             ) : null}
           </TouchableOpacity>
         );
       })}
-      {!tasks.length ? <Text style={styles.emptyText}>Giai đoạn chưa có công việc.</Text> : null}
+      {!tasks.length ? <Text style={styles.emptyText}>Chưa có công việc nào cho giai đoạn này.</Text> : null}
+
+      <TouchableOpacity
+        style={styles.addTaskBtn}
+        onPress={() => setInlineFormOpen((prev) => !prev)}
+        activeOpacity={0.8}
+      >
+        <Feather name={inlineFormOpen ? "minus" : "plus"} size={16} color="#15803d" />
+        <Text style={styles.addTaskBtnText}>Thêm công việc vào giai đoạn này</Text>
+      </TouchableOpacity>
+
+      {inlineFormOpen ? (
+        <InlineStageTaskForm
+          planId={planId}
+          stageId={selectedStageId}
+          cropId={valueOf(plan?.cropId, plan?.crop?.id, plan?.cropCatalogId, plan?.cropCatalog?.id)}
+          cropCatalogId={valueOf(plan?.cropCatalogId, plan?.cropCatalog?.id)}
+          users={users}
+          onCancel={() => setInlineFormOpen(false)}
+          onSuccess={() => {
+            setInlineFormOpen(false);
+            fetchDetail();
+          }}
+        />
+      ) : null}
     </>
   );
 
@@ -759,7 +787,7 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
           <>
             <View style={styles.draftCardWrapper}>
               <View style={styles.draftCardTitleRow}>
-                <Text style={styles.draftCardMainTitle}>Bản tổng hợp chờ biên soạn từ Farm Leader</Text>
+                <Text style={styles.draftCardMainTitle}>Bản tổng hợp chờ biên soạn từ Tổ trưởng</Text>
                 {farmLeaderNotes.length > 0 ? (
                   <TouchableOpacity style={styles.generateDraftBtn} onPress={generateDraftDescriptionFromLogs}>
                     <Feather name="file-text" size={13} color="#92400e" />
@@ -780,7 +808,7 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
 
               {farmLeaderNotes.length > 0 ? (
                 <>
-                  <Text style={[styles.summaryTitle, { marginTop: 14 }]}>Ghi chép từ Farm Leader ({farmLeaderNotes.length} bản ghi)</Text>
+                  <Text style={[styles.summaryTitle, { marginTop: 14 }]}>Ghi chép từ Tổ trưởng ({farmLeaderNotes.length} bản ghi)</Text>
                   {farmLeaderNotes.map((note) => (
                     <View key={note.id} style={styles.leaderNoteItem}>
                       <View style={styles.leaderNoteHeader}>
@@ -967,8 +995,8 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
             <Text style={styles.modalTitle}>{logModal.action === 'approve' ? 'Phê duyệt nhật ký' : 'Từ chối nhật ký'}</Text>
             <Text style={styles.modalSub}>
               {logModal.action === 'approve'
-                ? 'Xác nhận duyệt ghi chép này từ Farm Leader?'
-                : 'Nhập lý do từ chối để Farm Leader chỉnh sửa lại:'}
+                ? 'Xác nhận duyệt ghi chép này từ Tổ trưởng?'
+                : 'Nhập lý do từ chối để Tổ trưởng chỉnh sửa lại:'}
             </Text>
             <TextInput
               style={styles.modalInput}
@@ -1079,6 +1107,20 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
           )}
         </View>
       </Modal>
+
+      <CreateTaskModal
+        visible={createTaskModalVisible}
+        planId={planId}
+        stage={selectedStage}
+        cropId={valueOf(plan?.cropId, plan?.crop?.id, plan?.cropCatalogId, plan?.cropCatalog?.id)}
+        cropCatalogId={valueOf(plan?.cropCatalogId, plan?.cropCatalog?.id)}
+        users={users}
+        onClose={() => setCreateTaskModalVisible(false)}
+        onSuccess={() => {
+          setCreateTaskModalVisible(false);
+          fetchDetail();
+        }}
+      />
     </View>
   );
 }
@@ -1262,4 +1304,24 @@ const styles = StyleSheet.create({
   pendingSubmittedBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', borderRadius: 12, padding: 14, marginTop: 16 },
   pendingSubmittedTitle: { color: '#b45309', fontSize: 14, fontWeight: '900', marginBottom: 2 },
   pendingSubmittedSub: { color: '#78350f', fontSize: 12, lineHeight: 18, fontWeight: '500' },
+  addTaskBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#86efac',
+    borderRadius: 12,
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  addTaskBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#15803d',
+  },
 });
