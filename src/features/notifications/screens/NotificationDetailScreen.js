@@ -7,8 +7,13 @@ import api from '../../../shared/api/client';
 import { getEntityId } from '../../../shared/api/response';
 import { formatVietnamDateTime } from '../utils/dateTime';
 
+import { useAuthStore } from '../../auth/store/authStore';
+import { navigateToNotificationTarget } from '../utils/notificationRouter';
+
 export default function NotificationDetailScreen({ navigation, route }) {
   const notification = route.params?.notification || {};
+  const user = useAuthStore((state) => state.user);
+  const userRole = user?.role || user?.roles?.[0];
   const queryClient = useQueryClient();
   const id = getEntityId(notification);
   const unread = !(notification.isRead ?? notification.read);
@@ -38,6 +43,14 @@ export default function NotificationDetailScreen({ navigation, route }) {
           <Text style={styles.contentLabel}>Nội dung</Text>
           <Text style={styles.message}>{content}</Text>
           {notification.senderName || notification.createdByName ? <View style={styles.metaBox}><Text style={styles.metaLabel}>Người gửi</Text><Text style={styles.metaValue}>{notification.senderName || notification.createdByName}</Text></View> : null}
+
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => navigateToNotificationTarget(notification, navigation, userRole)}
+          >
+            <Feather name="external-link" size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>Xem chi tiết mục liên quan</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
@@ -64,4 +77,20 @@ const styles = StyleSheet.create({
   metaBox: { backgroundColor: '#f8fafc', borderRadius: 11, padding: 12, marginTop: 16 },
   metaLabel: { color: '#64748b', fontSize: 12, fontWeight: '700' },
   metaValue: { color: '#1e293b', fontSize: 14, fontWeight: '700', marginTop: 4 },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#15803d',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 24,
+    elevation: 2,
+    shadowColor: '#15803d',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  actionButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

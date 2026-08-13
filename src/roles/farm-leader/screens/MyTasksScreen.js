@@ -24,8 +24,9 @@ import SummaryReportModal from '../../../features/summary-report/components/Summ
 import api from '../../../shared/api/client';
 import { extractItems, getEntityId } from '../../../shared/api/response';
 import { offlineQueue } from '../../../shared/services/offlineQueue';
-import { normalizeStatus, STATUS, valueOf } from '../../../shared/utils/data';
+import { formatRoleName, normalizeStatus, STATUS, valueOf } from '../../../shared/utils/data';
 import { dateOf, dateTimeOf, formatNumber, resolveAvatarUrl, sortLogsDescending } from '../../../shared/utils/format';
+import { getPlanQuarantineSummary, getTaskQuarantineWarning } from '../../../features/daily-log/utils/quarantineValidation';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DetailCell component
@@ -47,10 +48,10 @@ function DetailCell({ icon, label, value }) {
 function TaskDetailScreen({ task, onClose, onRefreshParent }) {
   const [data, setData] = useState(null);
   const [loadingData, setLoadingData] = useState(true);
-  const [activeTab, setActiveTab] = useState('log');
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [summaryModalVisible, setSummaryModalVisible] = useState(false);
+  const [showAllAssignees, setShowAllAssignees] = useState(false);
 
   // Inline form state
   const [logDesc, setLogDesc] = useState('');
@@ -293,7 +294,7 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
         task={d}
         history={history}
         onClose={() => setSummaryModalVisible(false)}
-        onSuccess={() => { setSummaryModalVisible(false); onClose(); onRefreshParent?.(); }}
+        onSuccess={() => { setSummaryModalVisible(false); onClose(); onRefreshParent?.('submitSummary'); }}
       />
 
       {loadingData ? (
@@ -308,17 +309,6 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
             <View style={ds.heroBlock}>
               <Text style={ds.heroTitle}>{taskName}</Text>
               {description ? <Text style={ds.heroDesc}>{description}</Text> : null}
-              {canWriteLog ? (
-                <TouchableOpacity style={ds.heroSummaryBtn} onPress={() => setSummaryModalVisible(true)}>
-                  <Feather name="check-circle" size={15} color="#fff" />
-                  <Text style={ds.heroSummaryBtnText}>Hoàn thành & Gửi Summary</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={[ds.heroSummaryBtn, { backgroundColor: '#d97706' }]} onPress={() => setSummaryModalVisible(true)}>
-                  <Feather name="file-text" size={15} color="#fff" />
-                  <Text style={ds.heroSummaryBtnText}>Xem báo cáo tổng hợp đã gửi</Text>
-                </TouchableOpacity>
-              )}
             </View>
 
             {/* Info cards */}
@@ -329,20 +319,22 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
                     <Text style={ds.infoCardLabel}>Kế hoạch canh tác</Text>
                     <Text style={ds.infoCardValue}>{planName}</Text>
                   </View>
-                ) : null}
+                ) : <View style={{ flex: 1 }} />}
                 {stageName ? (
                   <View style={ds.infoCard}>
                     <Text style={ds.infoCardLabel}>Giai đoạn</Text>
                     <Text style={ds.infoCardValue}>{stageName}</Text>
                   </View>
-                ) : null}
+                ) : <View style={{ flex: 1 }} />}
               </View>
             ) : null}
 
-            {/* Detail grid */}
-            <View style={ds.detailGrid}>
+            {/* Detail grid rows */}
+            <View style={ds.detailGridRow}>
               <DetailCell icon="calendar" label="Ngày bắt đầu" value={startDate} />
               <DetailCell icon="clock" label="Ngày kết thúc" value={endDate} />
+            </View>
+            <View style={ds.detailGridRow}>
               <DetailCell icon="map-pin" label="Vùng trồng" value={location} />
               <DetailCell icon="users" label="Thành viên" value={`${memberCount} người`} />
             </View>
@@ -350,14 +342,18 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
             {/* Assignees list */}
             {assignees.length > 0 ? (
               <View style={ds.section}>
-                <Text style={ds.sectionTitle}>Thành viên nhóm</Text>
-                <View style={ds.assigneeList}>
-                  {assignees.map((a, idx) => {
+                <View style={ds.sectionHeaderRow}>
+                  <Feather name="users" size={16} color="#15803d" />
+                  <Text style={ds.sectionTitle}>Thành viên nhóm ({assignees.length})</Text>
+                </View>
+                <View style={ds.assigneeGrid}>
+                  {(showAllAssignees ? assignees : assignees.slice(0, 3)).map((a, idx) => {
                     const name = valueOf(a.fullName, a.name, a.userName, 'Thành viên');
                     const initial = (name || '?')[0].toUpperCase();
                     const isLeader = a.role === 'FARM_LEADER' || a.isLeader;
+                    const roleLabel = isLeader ? 'Tổ trưởng' : 'Nông dân';
                     return (
-                      <View key={idx} style={ds.assigneeRow}>
+                      <View key={idx} style={ds.assigneeCard}>
                         {a.avatarUrl ? (
                           <Image source={{ uri: a.avatarUrl }} style={ds.avatarImage} />
                         ) : (
@@ -366,236 +362,137 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
                           </View>
                         )}
                         <View style={{ flex: 1 }}>
-                          <Text style={ds.assigneeName}>{name}</Text>
-                          {a.role ? <Text style={ds.assigneeRole}>{a.role}</Text> : null}
+                          <Text style={ds.assigneeName} numberOfLines={1}>{name}</Text>
+                          <Text style={[ds.assigneeRoleBadge, isLeader && ds.assigneeRoleLeader]}>{roleLabel}</Text>
                         </View>
                       </View>
                     );
                   })}
                 </View>
+                {assignees.length > 3 ? (
+                  <TouchableOpacity
+                    style={ds.showMoreAssigneesBtn}
+                    onPress={() => setShowAllAssignees(!showAllAssignees)}
+                  >
+                    <Text style={ds.showMoreAssigneesText}>
+                      {showAllAssignees ? 'Thu gọn danh sách' : `+ Xem thêm ${assignees.length - 3} thành viên`}
+                    </Text>
+                    <Feather name={showAllAssignees ? 'chevron-up' : 'chevron-down'} size={14} color="#15803d" />
+                  </TouchableOpacity>
+                ) : null}
               </View>
             ) : null}
 
-            {/* Tab bar */}
-            <View style={ds.tabBar}>
-              <TouchableOpacity
-                style={[ds.tab, activeTab === 'log' && ds.tabActive]}
-                onPress={() => setActiveTab('log')}
-              >
-                <Feather name="edit-3" size={14} color={activeTab === 'log' ? '#15803d' : '#94a3b8'} />
-                <Text style={[ds.tabText, activeTab === 'log' && ds.tabTextActive]}>Nội dung thực hiện</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[ds.tab, activeTab === 'history' && ds.tabActive]}
-                onPress={() => { setActiveTab('history'); fetchHistory(); }}
-              >
-                <Feather name="list" size={14} color={activeTab === 'history' ? '#15803d' : '#94a3b8'} />
-                <Text style={[ds.tabText, activeTab === 'history' && ds.tabTextActive]}>
-                  Lịch sử{history.length > 0 ? ` (${history.length})` : ''}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Tab: Nội dung thực hiện */}
-            {activeTab === 'log' ? (
-              <View style={ds.tabContent}>
-                <View style={ds.inlineForm}>
-                  <View style={ds.formRow}>
-                    <View style={ds.formHalf}>
-                      <Text style={ds.formLabel}><Text style={{ color: '#ef4444' }}>*</Text> Ngày ghi nhận</Text>
-                      <View style={ds.dateDisplayBox}>
-                        <Text style={ds.dateDisplayText}>{new Date().toLocaleDateString('vi-VN')}</Text>
-                        <Feather name="calendar" size={15} color="#94a3b8" />
-                      </View>
-                    </View>
-                    <View style={ds.formHalf}>
-                      <Text style={ds.formLabel}>Ảnh minh chứng</Text>
-                      <TouchableOpacity
-                        style={ds.photoBox}
-                        disabled={!canWriteLog}
-                        onPress={() => { onClose(); setTimeout(() => onRefreshParent?.('openLog', task), 250); }}
-                      >
-                        <Text style={ds.photoBoxText}>Chưa có ảnh</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  <Text style={ds.formLabel}><Text style={{ color: '#ef4444' }}>*</Text> Chi tiết công việc</Text>
-                  <TextInput
-                    style={[ds.formTextarea, !canWriteLog && ds.formTextareaDisabled]}
-                    value={logDesc}
-                    onChangeText={setLogDesc}
-                    editable={canWriteLog}
-                    placeholder="Mô tả tình hình cây trồng, vấn đề phát sinh..."
-                    placeholderTextColor="#94a3b8"
-                    multiline
-                    textAlignVertical="top"
-                    numberOfLines={4}
-                  />
-
-                  <View style={ds.formSectionHeader}>
-                    <Text style={ds.formSectionTitle}>Phân bón</Text>
-                    {canWriteLog && (
-                      <TouchableOpacity
-                        style={ds.addMaterialBtn}
-                        onPress={() => { onClose(); setTimeout(() => onRefreshParent?.('openLog', task), 250); }}
-                      >
-                        <Feather name="plus" size={13} color="#15803d" />
-                        <Text style={ds.addMaterialBtnText}>Thêm</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                  <View style={ds.emptyMaterial}>
-                    <Text style={ds.emptyMaterialText}>Chưa có phân bón nào</Text>
-                  </View>
-
-                  <View style={ds.formSectionHeader}>
-                    <Text style={ds.formSectionTitle}>Nông dược</Text>
-                    {canWriteLog && (
-                      <TouchableOpacity
-                        style={ds.addMaterialBtn}
-                        onPress={() => { onClose(); setTimeout(() => onRefreshParent?.('openLog', task), 250); }}
-                      >
-                        <Feather name="plus" size={13} color="#15803d" />
-                        <Text style={ds.addMaterialBtnText}>Thêm</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                  <View style={ds.emptyMaterial}>
-                    <Text style={ds.emptyMaterialText}>Chưa có nông dược nào</Text>
-                  </View>
-
-                  {canWriteLog ? (
-                    <>
-                      <TouchableOpacity style={ds.submitLogBtn} onPress={submitInlineLog} disabled={logSaving}>
-                        {logSaving
-                          ? <ActivityIndicator color="#fff" />
-                          : <><Feather name="send" size={15} color="#fff" /><Text style={ds.submitLogBtnText}>Lưu ghi chép</Text></>
-                        }
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={ds.fullFormLink}
-                        onPress={() => { onClose(); setTimeout(() => onRefreshParent?.('openLog', task), 250); }}
-                      >
-                        <Feather name="external-link" size={13} color="#64748b" />
-                        <Text style={ds.fullFormLinkText}>Mở form đầy đủ (ảnh, phân bón, nông dược...)</Text>
-                      </TouchableOpacity>
-                    </>
-                  ) : null}
+            {/* Lịch sử ghi chép */}
+            <View style={ds.section}>
+              <View style={ds.sectionHeaderRow}>
+                <Feather name="list" size={16} color="#15803d" />
+                <Text style={ds.sectionTitle}>Lịch sử ghi chép ({history.length})</Text>
+              </View>
+              {loadingHistory ? (
+                <View style={ds.historyLoading}>
+                  <ActivityIndicator color="#15803d" />
+                  <Text style={ds.loadingText}>Đang tải lịch sử...</Text>
                 </View>
-              </View>
-            ) : null}
-
-            {/* Tab: Lịch sử ghi chép */}
-            {activeTab === 'history' ? (
-              <View style={ds.tabContent}>
-                {loadingHistory ? (
-                  <View style={ds.historyLoading}>
-                    <ActivityIndicator color="#15803d" />
-                    <Text style={ds.loadingText}>Đang tải lịch sử...</Text>
-                  </View>
-                ) : history.length === 0 ? (
-                  <View style={ds.emptyTabContent}>
-                    <Feather name="inbox" size={36} color="#cbd5e1" />
-                    <Text style={ds.emptyTabText}>Chưa có bản ghi nào</Text>
-                  </View>
-                ) : (
-                  <View style={ds.historyList}>
-                    <Text style={ds.historyCount}>{history.length} bản ghi</Text>
-                    {history.map((item, idx) => {
-                      const logDate = valueOf(item.createdAt, item.activityDate, item.logDate, item.performedAt, item.date);
-                      const logDescText = valueOf(item.description, item.content, item.notes);
-                      const updatedBy = valueOf(
-                        item.createdByName,
-                        item.updatedByName,
-                        item.authorName,
-                        item.userName,
-                        item.user?.fullName,
-                        currentUser?.fullName,
-                        d.assignedLeaderName,
-                        assignees[0]?.fullName,
-                        'Nông dân'
-                      );
-                      const hasFert = item.fertilizers?.length > 0;
-                      const hasPest = item.pesticides?.length > 0;
-                      return (
-                        <View key={idx} style={ds.historyItem}>
-                          <View style={ds.historyDot} />
-                          <View style={ds.historyBody}>
-                            <Text style={ds.historyDate}>{dateTimeOf(logDate)}</Text>
-                            <Text style={ds.historyUpdatedBy}>Cập nhật bởi: {updatedBy}</Text>
-                            {logDescText ? <Text style={ds.historyDesc}>{logDescText}</Text> : null}
-                            {hasFert ? (
-                              <View style={ds.historyMaterialBoxGreen}>
-                                <Text style={ds.historyMaterialTitleGreen}>Phân bón</Text>
-                                <View style={ds.historyMaterialContentGreen}>
-                                  <View style={ds.historyMaterialHeaderRow}>
-                                    <Feather name="droplet" size={12} color="#15803d" />
-                                    <Text style={ds.historyMaterialLabelGreen}>Phân bón đã sử dụng:</Text>
-                                  </View>
-                                  {item.fertilizers.map((f, fIdx) => (
-                                    <Text key={fIdx} style={ds.historyMaterialItemGreen}>
-                                      • <Text style={{ fontWeight: '700', color: '#1e293b' }}>{valueOf(f.name, f.fertilizerName, 'Phân bón')}</Text>: <Text style={{ color: '#15803d', fontWeight: '800' }}>{formatNumber(f.quantity || f.amount || 1)} {valueOf(f.unit, 'kg')}</Text>{(f.area || f.totalArea) ? ` (${formatNumber(f.area || f.totalArea)} m²)` : ''}
-                                    </Text>
-                                  ))}
+              ) : history.length === 0 ? (
+                <View style={ds.emptyTabContent}>
+                  <Feather name="inbox" size={36} color="#cbd5e1" />
+                  <Text style={ds.emptyTabText}>Chưa có bản ghi nhật ký nào</Text>
+                </View>
+              ) : (
+                <View style={ds.historyList}>
+                  {history.map((item, idx) => {
+                    const logDate = valueOf(item.createdAt, item.activityDate, item.logDate, item.performedAt, item.date);
+                    const logDescText = valueOf(item.description, item.content, item.notes);
+                    const updatedBy = valueOf(
+                      item.createdByName,
+                      item.updatedByName,
+                      item.authorName,
+                      item.userName,
+                      item.user?.fullName,
+                      currentUser?.fullName,
+                      d.assignedLeaderName,
+                      assignees[0]?.fullName,
+                      'Nông dân'
+                    );
+                    const hasFert = item.fertilizers?.length > 0;
+                    const hasPest = item.pesticides?.length > 0;
+                    return (
+                      <View key={idx} style={ds.historyItem}>
+                        <View style={ds.historyDot} />
+                        <View style={ds.historyBody}>
+                          <Text style={ds.historyDate}>{dateTimeOf(logDate)}</Text>
+                          <Text style={ds.historyUpdatedBy}>Cập nhật bởi: {updatedBy}</Text>
+                          {logDescText ? <Text style={ds.historyDesc}>{logDescText}</Text> : null}
+                          {hasFert ? (
+                            <View style={ds.historyMaterialBoxGreen}>
+                              <Text style={ds.historyMaterialTitleGreen}>Phân bón</Text>
+                              <View style={ds.historyMaterialContentGreen}>
+                                <View style={ds.historyMaterialHeaderRow}>
+                                  <Feather name="droplet" size={12} color="#15803d" />
+                                  <Text style={ds.historyMaterialLabelGreen}>Phân bón đã sử dụng:</Text>
                                 </View>
+                                {item.fertilizers.map((f, fIdx) => (
+                                  <Text key={fIdx} style={ds.historyMaterialItemGreen}>
+                                    • <Text style={{ fontWeight: '700', color: '#1e293b' }}>{valueOf(f.name, f.fertilizerName, 'Phân bón')}</Text>: <Text style={{ color: '#15803d', fontWeight: '800' }}>{formatNumber(f.quantity || f.amount || 1)} {valueOf(f.unit, 'kg')}</Text>{(f.area || f.totalArea) ? ` (${formatNumber(f.area || f.totalArea)} m2)` : ''}
+                                  </Text>
+                                ))}
                               </View>
-                            ) : null}
+                            </View>
+                          ) : null}
 
-                            {hasPest ? (
-                              <View style={ds.historyMaterialBoxPurple}>
-                                <Text style={ds.historyMaterialTitlePurple}>Thuốc</Text>
-                                <View style={ds.historyMaterialContentPurple}>
-                                  <View style={ds.historyMaterialHeaderRow}>
-                                    <Feather name="shield" size={12} color="#9333ea" />
-                                    <Text style={ds.historyMaterialLabelPurple}>Nông dược đã sử dụng:</Text>
-                                  </View>
-                                  {item.pesticides.map((p, pIdx) => (
-                                    <Text key={pIdx} style={ds.historyMaterialItemPurple}>
-                                      • <Text style={{ fontWeight: '700', color: '#1e293b' }}>{valueOf(p.name, p.pesticideName, 'Thuốc')}</Text>: <Text style={{ color: '#9333ea', fontWeight: '800' }}>{p.quantity || p.amount || 1} {valueOf(p.unit, 'lít')}</Text>{(p.area || p.totalArea) ? ` (${p.area || p.totalArea} m²)` : ''}
-                                    </Text>
-                                  ))}
+                          {hasPest ? (
+                            <View style={ds.historyMaterialBoxPurple}>
+                              <Text style={ds.historyMaterialTitlePurple}>Thuốc</Text>
+                              <View style={ds.historyMaterialContentPurple}>
+                                <View style={ds.historyMaterialHeaderRow}>
+                                  <Feather name="shield" size={12} color="#9333ea" />
+                                  <Text style={ds.historyMaterialLabelPurple}>Nông dược đã sử dụng:</Text>
                                 </View>
+                                {item.pesticides.map((p, pIdx) => (
+                                  <Text key={pIdx} style={ds.historyMaterialItemPurple}>
+                                    • <Text style={{ fontWeight: '700', color: '#1e293b' }}>{valueOf(p.name, p.pesticideName, 'Thuốc')}</Text>: <Text style={{ color: '#9333ea', fontWeight: '800' }}>{p.quantity || p.amount || 1} {valueOf(p.unit, 'lít')}</Text>{(p.area || p.totalArea) ? ` (${p.area || p.totalArea} m2)` : ''}
+                                  </Text>
+                                ))}
                               </View>
-                            ) : null}
-                            {(() => {
-                              const rawImgs = Array.isArray(item.images) ? item.images :
-                                Array.isArray(item.photoUrls) ? item.photoUrls :
-                                  Array.isArray(item.photos) ? item.photos :
-                                    Array.isArray(item.imageUrls) ? item.imageUrls :
-                                      (item.imageUrl || item.photo || item.image) ? [item.imageUrl || item.photo || item.image] : [];
-                              const imgUrls = rawImgs.map((img) => {
-                                if (!img) return null;
-                                if (typeof img === 'string') return resolveAvatarUrl(img);
-                                return resolveAvatarUrl(valueOf(img.url, img.imageUrl, img.path, img.photoUrl, img.src));
-                              }).filter(Boolean);
+                            </View>
+                          ) : null}
+                          {(() => {
+                            const rawImgs = Array.isArray(item.images) ? item.images :
+                              Array.isArray(item.photoUrls) ? item.photoUrls :
+                                Array.isArray(item.photos) ? item.photos :
+                                  Array.isArray(item.imageUrls) ? item.imageUrls :
+                                    (item.imageUrl || item.photo || item.image) ? [item.imageUrl || item.photo || item.image] : [];
+                            const imgUrls = rawImgs.map((img) => {
+                              if (!img) return null;
+                              if (typeof img === 'string') return resolveAvatarUrl(img);
+                              return resolveAvatarUrl(valueOf(img.url, img.imageUrl, img.path, img.photoUrl, img.src));
+                            }).filter(Boolean);
 
-                              if (imgUrls.length === 0) return null;
-                              return (
-                                <View style={ds.historyImageGallery}>
-                                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ds.historyImageScroll}>
-                                    {imgUrls.map((url, imgIdx) => (
-                                      <TouchableOpacity
-                                        key={imgIdx}
-                                        activeOpacity={0.85}
-                                        onPress={() => setPreviewImage(url)}
-                                      >
-                                        <Image source={{ uri: url }} style={ds.historyThumbImage} resizeMode="cover" />
-                                      </TouchableOpacity>
-                                    ))}
-                                  </ScrollView>
-                                </View>
-                              );
-                            })()}
-                          </View>
+                            if (imgUrls.length === 0) return null;
+                            return (
+                              <View style={ds.historyImageGallery}>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ds.historyImageScroll}>
+                                  {imgUrls.map((url, imgIdx) => (
+                                    <TouchableOpacity
+                                      key={imgIdx}
+                                      activeOpacity={0.85}
+                                      onPress={() => setPreviewImage(url)}
+                                    >
+                                      <Image source={{ uri: url }} style={ds.historyThumbImage} resizeMode="cover" />
+                                    </TouchableOpacity>
+                                  ))}
+                                </ScrollView>
+                              </View>
+                            );
+                          })()}
                         </View>
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-            ) : null}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
 
             <Modal visible={Boolean(previewImage)} transparent animationType="fade" onRequestClose={() => setPreviewImage(null)}>
               <TouchableOpacity style={ds.imagePreviewBackdrop} activeOpacity={1} onPress={() => setPreviewImage(null)}>
@@ -608,16 +505,32 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
               </TouchableOpacity>
             </Modal>
 
-            <View style={{ height: canWriteLog ? 80 : 40 }} />
+            <View style={{ height: canWriteLog ? 110 : 60 }} />
           </ScrollView>
+
           {canWriteLog ? (
             <View style={ds.bottomStickyBar}>
-              <TouchableOpacity style={ds.bottomSummaryBtn} onPress={() => setSummaryModalVisible(true)}>
-                <Feather name="check-circle" size={17} color="#fff" />
-                <Text style={ds.bottomSummaryBtnText}>Hoàn thành & Gửi Summary</Text>
+              <TouchableOpacity
+                style={ds.primaryLogBtn}
+                onPress={() => { onClose(); setTimeout(() => onRefreshParent?.('openLog', task), 250); }}
+              >
+                <Feather name="edit-3" size={18} color="#fff" />
+                <Text style={ds.primaryLogBtnText}>Ghi nhật ký</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={ds.secondarySummaryBtn} onPress={() => setSummaryModalVisible(true)}>
+                <Feather name="check-circle" size={16} color="#15803d" />
+                <Text style={ds.secondarySummaryBtnText}>Hoàn thành & Gửi Summary</Text>
               </TouchableOpacity>
             </View>
-          ) : null}
+          ) : (
+            <View style={ds.bottomStickyBar}>
+              <TouchableOpacity style={ds.primaryLogBtn} onPress={() => setSummaryModalVisible(true)}>
+                <Feather name="file-text" size={17} color="#fff" />
+                <Text style={ds.primaryLogBtnText}>Xem báo cáo tổng hợp đã gửi</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       )}
     </View>
@@ -650,27 +563,43 @@ const ds = StyleSheet.create({
   },
   heroTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a', marginBottom: 6 },
   heroDesc: { fontSize: 14, color: '#475569', lineHeight: 20 },
-  infoRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  infoRow: { flexDirection: 'row', alignItems: 'stretch', gap: 10, marginBottom: 10 },
   infoCard: {
-    flex: 1, backgroundColor: '#f0fdf4', borderRadius: 10, padding: 12,
-    borderWidth: 1, borderColor: '#bbf7d0',
+    flex: 1, backgroundColor: '#f0fdf4', borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: '#bbf7d0', justifyContent: 'center',
   },
   infoCardLabel: { fontSize: 11, color: '#16a34a', fontWeight: '600', marginBottom: 3 },
-  infoCardValue: { fontSize: 13, color: '#15803d', fontWeight: '700' },
-  detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
+  infoCardValue: { fontSize: 13, color: '#15803d', fontWeight: '700', lineHeight: 19 },
+  detailGridRow: { flexDirection: 'row', alignItems: 'stretch', gap: 10, marginBottom: 10 },
   detailCell: {
-    width: '47%', backgroundColor: '#fff', borderRadius: 10, padding: 12,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
+    flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: '#e2e8f0',
+    shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 6, elevation: 1,
+    justifyContent: 'center',
   },
   detailCellIcon: { marginBottom: 4 },
   detailCellLabel: { fontSize: 11, color: '#94a3b8', fontWeight: '600', marginBottom: 2 },
-  detailCellValue: { fontSize: 13, color: '#1e293b', fontWeight: '700' },
+  detailCellValue: { fontSize: 13, color: '#1e293b', fontWeight: '700', lineHeight: 19 },
   section: {
     backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 12,
     shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
   },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a', marginBottom: 10 },
   assigneeList: { gap: 10 },
+  assigneeGrid: { gap: 8 },
+  assigneeCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#f8fafc', borderRadius: 10, padding: 10,
+    borderWidth: 1, borderColor: '#f1f5f9',
+  },
+  assigneeRoleBadge: { fontSize: 11, color: '#64748b', fontWeight: '600', marginTop: 1 },
+  assigneeRoleLeader: { color: '#1d4ed8', fontWeight: '700' },
+  showMoreAssigneesBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 10, marginTop: 8, backgroundColor: '#f0fdf4',
+    borderRadius: 8, borderWidth: 1, borderColor: '#bbf7d0',
+  },
+  showMoreAssigneesText: { color: '#15803d', fontSize: 13, fontWeight: '700' },
   assigneeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatarImage: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#e2e8f0' },
   avatar: {
@@ -790,11 +719,23 @@ const ds = StyleSheet.create({
     marginTop: 12, shadowColor: '#15803d', shadowOpacity: 0.2, shadowRadius: 6, elevation: 2,
   },
   heroSummaryBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
   bottomStickyBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 10, paddingBottom: Platform.OS === 'ios' ? 28 : 14,
+    backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 10, paddingBottom: Platform.OS === 'ios' ? 24 : 12,
     borderTopWidth: 1, borderTopColor: '#e2e8f0', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 6,
+    gap: 8,
   },
+  primaryLogBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#15803d', borderRadius: 12, paddingVertical: 13,
+  },
+  primaryLogBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  secondarySummaryBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#15803d', borderRadius: 12, paddingVertical: 11,
+  },
+  secondarySummaryBtnText: { color: '#15803d', fontSize: 14, fontWeight: '700' },
   bottomSummaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: '#15803d', borderRadius: 12, paddingVertical: 13,
@@ -810,7 +751,7 @@ export default function MyTasksScreen({ navigation, route }) {
   const [plans, setPlans] = useState([]);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filter, setFilter] = useState('ALL');
+  const [filter, setFilter] = useState('IN_PROGRESS');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -950,35 +891,33 @@ export default function MyTasksScreen({ navigation, route }) {
         let key = planId;
         if (!key || !plansMap.has(key)) {
           const existingEntry = Array.from(plansMap.entries()).find(
-            ([_, p]) => String(p.name || '').toLowerCase() === String(planName || '').toLowerCase()
+            ([_, p]) => String(p.name || '').toLowerCase().trim() === String(planName || '').toLowerCase().trim()
           );
           if (existingEntry) {
             key = existingEntry[0];
-          } else {
-            key = planId || planName;
           }
         }
 
-        if (!plansMap.has(key)) {
-          plansMap.set(key, { id: key, name: planName, cropName, tasks: [] });
+        if (plansMap.has(key)) {
+          plansMap.get(key).tasks.push(task);
         }
-
-        plansMap.get(key).tasks.push(task);
       });
 
-      const builtPlans = Array.from(plansMap.values()).map((p) => {
-        const tasksCount = p.tasks.length;
-        const doingCount = p.tasks.filter((t) => normalizeStatus(t) === 'IN_PROGRESS').length;
-        const completedCount = p.tasks.filter((t) => normalizeStatus(t) === 'COMPLETED').length;
-        const pendingCount = p.tasks.filter((t) => normalizeStatus(t) === 'PENDING_APPROVAL').length;
-        return {
-          ...p,
-          tasksCount,
-          doingCount,
-          completedCount,
-          pendingCount,
-        };
-      });
+      const builtPlans = Array.from(plansMap.values())
+        .filter((p) => p.tasks.length > 0)
+        .map((p) => {
+          const tasksCount = p.tasks.length;
+          const doingCount = p.tasks.filter((t) => normalizeStatus(t) === 'IN_PROGRESS').length;
+          const completedCount = p.tasks.filter((t) => normalizeStatus(t) === 'COMPLETED').length;
+          const pendingCount = p.tasks.filter((t) => normalizeStatus(t) === 'PENDING_APPROVAL').length;
+          return {
+            ...p,
+            tasksCount,
+            doingCount,
+            completedCount,
+            pendingCount,
+          };
+        });
 
       setPlans(builtPlans);
     } catch (requestError) {
@@ -999,8 +938,16 @@ export default function MyTasksScreen({ navigation, route }) {
   };
 
   const handleDetailAction = (action, task) => {
-    if (action === 'openLog') openEntry(task, 'daily');
-    if (action === 'openSummary') openEntry(task, 'summary');
+    if (action === 'openLog') {
+      openEntry(task, 'daily');
+    } else if (action === 'openSummary') {
+      openEntry(task, 'summary');
+    } else if (action === 'submitSummary') {
+      fetchTasks();
+      setFilter('PENDING_APPROVAL');
+    } else {
+      fetchTasks();
+    }
   };
 
   useEffect(() => {
@@ -1038,6 +985,7 @@ export default function MyTasksScreen({ navigation, route }) {
       setDescription('');
       Alert.alert('Đã gửi báo cáo 🎉', 'Công việc đã gửi bản tổng hợp thành công.');
       fetchTasks();
+      setFilter('PENDING_APPROVAL');
     } catch (requestError) {
       const serverMsg = getApiErrorMessage(requestError, '');
       const isQuarantineError = serverMsg && (
@@ -1079,17 +1027,21 @@ export default function MyTasksScreen({ navigation, route }) {
     }))
     : tasks;
 
+  const assignedCount = currentTasksList.filter((t) => normalizeStatus(t) === 'ASSIGNED').length;
   const activeCount = currentTasksList.filter((t) => normalizeStatus(t) === 'IN_PROGRESS').length;
   const pendingCount = currentTasksList.filter((t) => normalizeStatus(t) === 'PENDING_APPROVAL').length;
   const completedCount = currentTasksList.filter((t) => normalizeStatus(t) === 'COMPLETED').length;
 
   const filteredTasks = currentTasksList.filter((task) => {
     const normState = normalizeStatus(task);
+    if (filter === 'ASSIGNED') return normState === 'ASSIGNED';
     if (filter === 'IN_PROGRESS') return normState === 'IN_PROGRESS';
     if (filter === 'PENDING_APPROVAL') return normState === 'PENDING_APPROVAL';
     if (filter === 'COMPLETED') return normState === 'COMPLETED';
     return true;
   });
+
+  const planQuarantineSummary = getPlanQuarantineSummary(currentTasksList);
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#15803d" /></View>;
 
@@ -1133,20 +1085,25 @@ export default function MyTasksScreen({ navigation, route }) {
               <TouchableOpacity
                 style={styles.planCard}
                 activeOpacity={0.88}
-                onPress={() => setSelectedPlan(item)}
+                onPress={() => {
+                  setSelectedPlan(item);
+                  setFilter('IN_PROGRESS');
+                }}
               >
                 <View style={styles.planCardTopRow}>
                   <Text style={styles.planCardTitle} numberOfLines={2}>
                     {item.name}
                   </Text>
                   <View style={styles.planTaskBadge}>
-                    <Text style={styles.planTaskBadgeText}>{item.tasksCount} task</Text>
+                    <Text style={styles.planTaskBadgeText}>{item.tasksCount} công việc</Text>
                   </View>
                 </View>
 
                 <View style={styles.planCardBottomRow}>
                   <Text style={styles.planCropText}>{item.cropName}</Text>
-                  <Text style={styles.planDoingText}>{item.doingCount} đang làm</Text>
+                  <Text style={styles.planDoingText}>
+                    {item.doingCount} đang làm
+                  </Text>
                 </View>
               </TouchableOpacity>
             );
@@ -1171,13 +1128,40 @@ export default function MyTasksScreen({ navigation, route }) {
             style={styles.headerBackBtn}
             onPress={() => setSelectedPlan(null)}
           >
-            <Feather name="arrow-left" size={20} color="#fff" />
+            <Feather name="arrow-left" size={18} color="#fff" />
             <Text style={styles.headerBackText}>Danh mục Kế hoạch</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.headerTitle}>Danh sách nhật ký</Text>
-        <Text style={styles.headerSubtitle}>Theo dõi nhật ký và tiến độ các giai đoạn canh tác</Text>
+        <Text style={styles.headerTitle} numberOfLines={2}>{selectedPlan.name}</Text>
       </View>
+
+      {/* Top Quarantine Summary Banner (khớp 100% giao diện Web) */}
+      {planQuarantineSummary.hasQuarantine ? (
+        <View style={styles.topQuarantineCard}>
+          <View style={styles.topQuarantineHeader}>
+            <Feather name="alert-triangle" size={20} color="#d97706" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.topQuarantineTitle}>Đang trong thời gian cách ly</Text>
+              <Text style={styles.topQuarantineSubtitle}>
+                {planQuarantineSummary.count} loại nông dược
+              </Text>
+            </View>
+          </View>
+          <View style={styles.topQuarantineList}>
+            {planQuarantineSummary.items.map((item, idx) => (
+              <View key={idx} style={styles.topQuarantineItem}>
+                <Feather name="shield" size={15} color="#d97706" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.topQuarantineItemName}>{item.name}</Text>
+                  <Text style={styles.topQuarantineItemDate}>
+                    Cách ly đến: <Text style={{ fontWeight: '700' }}>{item.eligibleDate}</Text>
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.filtersContainer}>
         <ScrollView
@@ -1187,6 +1171,7 @@ export default function MyTasksScreen({ navigation, route }) {
         >
           {[
             ['ALL', `Tất cả (${currentTasksList.length})`],
+            ['ASSIGNED', `Đã phân công (${assignedCount})`],
             ['IN_PROGRESS', `Đang làm (${activeCount})`],
             ['PENDING_APPROVAL', `Chờ duyệt (${pendingCount})`],
             ['COMPLETED', `Hoàn thành (${completedCount})`],
@@ -1217,6 +1202,7 @@ export default function MyTasksScreen({ navigation, route }) {
           const locationStr = valueOf(item.landPlotName, item.landPlotNames, item.landPlot?.name, item.logbookName);
           const stageName = valueOf(item.stageName, item.cultivationStageName, item.stage?.name);
           const planName = valueOf(item.planName, item.logbookName, item.cropName, item.cultivationLogbookName, item.logbook?.name);
+          const qWarn = getTaskQuarantineWarning(item, []);
 
           return (
             <TouchableOpacity
@@ -1224,20 +1210,23 @@ export default function MyTasksScreen({ navigation, route }) {
               activeOpacity={0.88}
               onPress={() => setDetailTask(item)}
             >
-              {(stageName || planName) ? (
+              {stageName ? (
                 <View style={styles.tagContainer}>
-                  {stageName ? (
-                    <View style={styles.stageTagBadge}>
-                      <Feather name="layers" size={12} color="#0369a1" />
-                      <Text style={styles.stageTagText}>Giai đoạn: {stageName}</Text>
-                    </View>
-                  ) : null}
-                  {planName ? (
-                    <View style={styles.planTagBadge}>
-                      <Feather name="book-open" size={12} color="#15803d" />
-                      <Text style={styles.planTagText}>{planName}</Text>
-                    </View>
-                  ) : null}
+                  <View style={styles.stageTagBadge}>
+                    <Feather name="layers" size={12} color="#0369a1" />
+                    <Text style={styles.stageTagText}>Giai đoạn: {stageName}</Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Inline Quarantine Warning */}
+              {qWarn.hasWarning ? (
+                <View style={styles.cardQuarantineWarning}>
+                  <View style={styles.cardQuarantineHeader}>
+                    <Feather name="alert-triangle" size={13} color="#b91c1c" />
+                    <Text style={styles.cardQuarantineTitle}>Cảnh báo thời gian cách ly</Text>
+                  </View>
+                  <Text style={styles.cardQuarantineText} numberOfLines={2}>{qWarn.message}</Text>
                 </View>
               ) : null}
 
@@ -1254,6 +1243,15 @@ export default function MyTasksScreen({ navigation, route }) {
                 <Feather name="calendar" size={14} color="#64748b" />
                 <Text style={styles.meta}>Ngày bắt đầu: {startDateStr}</Text>
               </View>
+
+              {qWarn.eligibleDate ? (
+                <View style={styles.metaRow}>
+                  <Feather name="shield" size={14} color="#15803d" />
+                  <Text style={[styles.meta, { color: '#15803d', fontWeight: '700' }]}>
+                    Ngày đủ điều kiện thu hoạch: {qWarn.eligibleDate}
+                  </Text>
+                </View>
+              ) : null}
 
               {locationStr ? (
                 <View style={styles.metaRow}>
@@ -1363,6 +1361,7 @@ export default function MyTasksScreen({ navigation, route }) {
         <DailyLogModal
           visible={dailyLogVisible}
           task={selectedTask}
+          plan={selectedPlan}
           onClose={() => { setDailyLogVisible(false); setSelectedTask(null); }}
           onSuccess={() => { setDailyLogVisible(false); setSelectedTask(null); fetchTasks(); }}
         />
@@ -1589,6 +1588,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
   },
+  cardQuarantineWarning: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 8,
+    gap: 4,
+  },
+  cardQuarantineHeader: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  cardQuarantineTitle: { fontSize: 12, fontWeight: '800', color: '#991b1b' },
+  cardQuarantineText: { fontSize: 12, color: '#b91c1c', lineHeight: 16 },
   rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 },
   cardTitle: { flex: 1, fontSize: 15, fontWeight: '800', color: '#0f172a' },
   badge: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 12, flexShrink: 0 },
@@ -1637,4 +1648,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  // TOP QUARANTINE SUMMARY CARD (MATCHES WEB)
+  topQuarantineCard: {
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderRadius: 14,
+    padding: 14,
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 4,
+  },
+  topQuarantineHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  topQuarantineTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#92400e',
+  },
+  topQuarantineSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#b45309',
+    marginTop: 1,
+  },
+  topQuarantineList: {
+    gap: 8,
+  },
+  topQuarantineItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#fef3c7',
+    borderRadius: 10,
+    padding: 10,
+  },
+  topQuarantineItemName: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#78350f',
+  },
+  topQuarantineItemDate: {
+    fontSize: 12,
+    color: '#b45309',
+    marginTop: 1,
+  },
 });

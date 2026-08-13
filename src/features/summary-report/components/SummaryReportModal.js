@@ -346,23 +346,6 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
               )}
             </View>
 
-            {/* Fertilizer recommendation */}
-            {aggregated.fertilizers.length > 0 ? (
-              <View style={styles.recommendationBox}>
-                <View style={styles.recommendationHeader}>
-                  <View style={styles.recommendationIconCircle}>
-                    <Feather name="info" size={12} color="#fff" />
-                  </View>
-                  <Text style={styles.recommendationTitle}>Khuyến nghị lượng sử dụng phân bón</Text>
-                </View>
-                {aggregated.fertilizers.map((f, i) => (
-                  <Text key={i} style={styles.recommendationText}>
-                    {f.recommendationText || `${f.name}: nên dùng ${f.quantity} ${f.unit}${f.area ? ` cho ${f.area} m2` : ''}`}
-                  </Text>
-                ))}
-              </View>
-            ) : null}
-
             {/* Pesticides table */}
             <View style={styles.materialSection}>
               <View style={styles.sectionHeaderRow}>
@@ -394,22 +377,70 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
               )}
             </View>
 
-            {/* Pesticide recommendation */}
-            {aggregated.pesticides.length > 0 ? (
-              <View style={styles.recommendationBox}>
-                <View style={styles.recommendationHeader}>
-                  <View style={styles.recommendationIconCircle}>
-                    <Feather name="info" size={12} color="#fff" />
+            {/* Pesticide recommendation (Khớp 100% giao diện Web) */}
+            {(() => {
+              const recoItems = [];
+              const seenNames = new Set();
+
+              const serverRecos = valueOf(
+                serverSummary?.pesticideRecommendations, serverSummary?.recommendations,
+                serverSummary?.pesticideDosages, task?.pesticideRecommendations, task?.recommendations
+              );
+
+              if (Array.isArray(serverRecos)) {
+                serverRecos.forEach((r) => {
+                  const name = valueOf(r.name, r.pesticideName, r.tradeName, r.materialName);
+                  const text = valueOf(r.recommendationText, r.recommendation, r.dosageRecommendation, r.recommendedDosage, r.dosage, r.instructions, r.text);
+                  if (name && text && !seenNames.has(name)) {
+                    seenNames.add(name);
+                    recoItems.push({ name, text: String(text) });
+                  } else if (name && (r.recommendedQuantity || r.recommendedArea) && !seenNames.has(name)) {
+                    seenNames.add(name);
+                    const qty = r.recommendedQuantity || 5;
+                    const unit = r.recommendedUnit || r.unit || 'kg';
+                    const area = r.recommendedArea || 5;
+                    recoItems.push({ name, text: `${name}: nên dùng ${qty} ${unit} cho ${area} m2` });
+                  }
+                });
+              }
+
+              if (recoItems.length === 0) {
+                aggregated.pesticides.forEach((p) => {
+                  const rec = valueOf(
+                    p.recommendationText, p.recommendation, p.dosageRecommendation, p.recommendedDosage,
+                    p.dosage, p.instructions, serverSummary?.pesticideRecommendation, task?.pesticideRecommendation
+                  );
+                  if (rec && !seenNames.has(p.name)) {
+                    seenNames.add(p.name);
+                    recoItems.push({ name: p.name, text: String(rec) });
+                  } else if ((p.recommendedQuantity || p.recommendedArea) && !seenNames.has(p.name)) {
+                    seenNames.add(p.name);
+                    recoItems.push({
+                      name: p.name,
+                      text: `${p.name}: nên dùng ${p.recommendedQuantity} ${p.recommendedUnit || p.unit || 'kg'}${p.recommendedArea ? ` cho ${p.recommendedArea} m2` : ''}`
+                    });
+                  }
+                });
+              }
+
+              if (recoItems.length === 0) return null;
+
+              return (
+                <View style={styles.recommendationBox}>
+                  <View style={styles.recommendationHeader}>
+                    <View style={styles.recommendationIconCircle}>
+                      <Feather name="info" size={12} color="#fff" />
+                    </View>
+                    <Text style={styles.recommendationTitle}>Khuyến nghị lượng sử dụng nông dược</Text>
                   </View>
-                  <Text style={styles.recommendationTitle}>Khuyến nghị lượng sử dụng nông dược</Text>
+                  {recoItems.map((item, idx) => (
+                    <Text key={idx} style={styles.recommendationText}>
+                      {item.text.includes(item.name) ? item.text : `${item.name}: ${item.text}`}
+                    </Text>
+                  ))}
                 </View>
-                {aggregated.pesticides.map((p, i) => (
-                  <Text key={i} style={styles.recommendationText}>
-                    {p.recommendationText || `${p.name}: nên dùng ${p.quantity} ${p.unit}${p.area ? ` cho ${p.area} m2` : ''}`}
-                  </Text>
-                ))}
-              </View>
-            ) : null}
+              );
+            })()}
 
             {/* Proof images */}
             <View style={styles.materialSection}>

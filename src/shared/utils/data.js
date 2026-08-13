@@ -66,11 +66,18 @@ export const normalizeStatus = (item) => {
     return 'PENDING_APPROVAL';
   }
 
+  // Assigned / Planned / New / Unstarted status check
+  if (
+    s === 'ASSIGNED' || s === 'PLANNED' || s === 'OPEN' || s === 'NEW' || s === 'NOT_STARTED' || s === '0' ||
+    s.includes('ĐÃ PHÂN CÔNG') || s.includes('DA PHAN CONG') || s.includes('LÊN LỊCH') || s.includes('LEN LICH')
+  ) {
+    return 'ASSIGNED';
+  }
+
   // In progress status check
   if (
-    s === 'IN_PROGRESS' || s === 'ASSIGNED' || s === 'DOING' || s === 'ACTIVE' ||
-    s === 'PLANNED' || s === 'OVERDUE' || s === '1' || s === '0' ||
-    s.includes('ĐANG THỰC HIỆN') || s.includes('DANG THUC HIEN') || s.includes('ĐANG LÀM')
+    s === 'IN_PROGRESS' || s === 'DOING' || s === 'ACTIVE' || s === 'INPROGRESS' || s === '1' ||
+    s.includes('ĐANG THỰC HIỆN') || s.includes('DANG THUC HIEN') || s.includes('ĐANG LÀM') || s.includes('DANG LAM')
   ) {
     return 'IN_PROGRESS';
   }
@@ -90,9 +97,23 @@ export const STATUS = {
   PLANNED:          ['Đã lên lịch',      '#2563eb', '#dbeafe', '#1d4ed8'],
   ASSIGNED:         ['Đã phân công',     '#2563eb', '#dbeafe', '#1d4ed8'],
   ASSIGNED_LEADER:  ['Đã phân công',     '#2563eb', '#dbeafe', '#1d4ed8'],
-  IN_PROGRESS:      ['Đang thực hiện',   '#15803d', '#dcfce7', '#166534'],
-  DOING:            ['Đang thực hiện',   '#15803d', '#dcfce7', '#166534'],
+  IN_PROGRESS:      ['Đang làm',         '#15803d', '#dcfce7', '#166534'],
+  DOING:            ['Đang làm',         '#15803d', '#dcfce7', '#166534'],
   COMPLETED:        ['Hoàn thành',       '#059669', '#dcfce7', '#166534'],
   DONE:             ['Hoàn thành',       '#059669', '#dcfce7', '#166534'],
   CANCELLED:        ['Đã hủy',           '#64748b', '#f1f5f9', '#475569'],
+};
+
+/**
+ * Maps English role names to Vietnamese labels.
+ */
+export const formatRoleName = (role) => {
+  if (!role) return 'Nông dân';
+  const r = String(role).trim().toUpperCase();
+  if (r === 'FARM_LEADER' || r === 'LEADER' || r.includes('TỔ TRƯỞNG') || r.includes('TO TRUONG')) return 'Tổ trưởng';
+  if (r === 'FARMER' || r.includes('NÔNG DÂN') || r.includes('NONG DAN')) return 'Nông dân';
+  if (r === 'SUPERVISOR' || r === 'FARM_SUPERVISOR' || r.includes('GIÁM SÁT')) return 'Giám sát';
+  if (r === 'ADMIN' || r.includes('QUẢN TRỊ')) return 'Quản trị viên';
+  if (r === 'EXPERT') return 'Chuyên gia';
+  return role;
 };

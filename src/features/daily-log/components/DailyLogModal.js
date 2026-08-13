@@ -19,15 +19,16 @@ import {
   View,
 } from 'react-native';
 
+import { formatVietnamDateTime } from '../../../features/notifications/utils/dateTime';
 import api from '../../../shared/api/client';
 import { extractItems, getApiErrorMessage, getEntityId, unwrapPayload } from '../../../shared/api/response';
-import { formatVietnamDateTime } from '../../../features/notifications/utils/dateTime';
+import VoiceInputButton from '../../../shared/components/VoiceInputButton';
 import { useNetworkStatus } from '../../../shared/hooks/useNetworkStatus';
 import { offlineQueue } from '../../../shared/services/offlineQueue';
 import { syncAllPendingLogs } from '../../../shared/services/syncDailyLogs';
-import { sortLogsDescending } from '../../../shared/utils/format';
+import { formatNumber, sortLogsDescending } from '../../../shared/utils/format';
+import { getTaskQuarantineWarning } from '../utils/quarantineValidation';
 import FieldCameraScreen from './FieldCameraScreen';
-import VoiceInputButton from '../../../shared/components/VoiceInputButton';
 
 const CATALOG_CACHE_KEY = {
   fertilizer: 'farm-leader:catalog-cache:fertilizer',
@@ -36,15 +37,17 @@ const CATALOG_CACHE_KEY = {
 
 const FERTILIZER_UNITS = ['kg', 'g', 'tấn', 'lít', 'ml', 'bao', 'can', 'gói'];
 const PESTICIDE_UNITS = ['ml', 'lít', 'g', 'kg', 'chai', 'gói', 'can', 'bình'];
+const HARVEST_UNITS = ['kg', 'tấn', 'lít', 'tạ', 'yến', 'gói', 'bao', 'thùng', 'trái', 'quả', 'giỏ'];
 
 const valueOf = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
 
 const catalogName = (item) => valueOf(item.name, item.fertilizerName, item.pesticideName, item.tradeName, item.code, 'Vật tư');
 
-export default function DailyLogModal({ visible, task, onClose, onSaved }) {
+export default function DailyLogModal({ visible, task, plan, onClose, onSaved }) {
   const { isConnected } = useNetworkStatus();
   const isOffline = isConnected === false;
 
+  const [fullTask, setFullTask] = useState(task);
   const [description, setDescription] = useState('');
   const [fertilizers, setFertilizers] = useState([]);
   const [pesticides, setPesticides] = useState([]);
@@ -61,6 +64,28 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+
+  // Harvest state
+  const [harvestQuantity, setHarvestQuantity] = useState('');
+  const [harvestUnit, setHarvestUnit] = useState('kg');
+  const [executedArea, setExecutedArea] = useState('');
+  const [harvestUnitPickerOpen, setHarvestUnitPickerOpen] = useState(false);
+
+  const activityType = String(task?.activityType || task?.type || task?.category || '').toUpperCase();
+  const taskTitle = String(task?.taskName || task?.title || task?.name || '').toLowerCase();
+  const isHarvest = activityType === 'HARVESTING' || taskTitle.includes('thu hoạch') || taskTitle.includes('harvest');
+
+  const totalPlanArea = Number(
+    valueOf(
+      fullTask?.totalPlanArea, fullTask?.plannedArea, fullTask?.planArea, fullTask?.area, fullTask?.totalArea, fullTask?.plotArea, fullTask?.landPlot?.area,
+      task?.totalPlanArea, task?.plannedArea, task?.planArea, task?.area, task?.totalArea, task?.plotArea, task?.landPlot?.area,
+      plan?.totalPlanArea, plan?.plannedArea, plan?.planArea, plan?.area, plan?.totalArea, plan?.plotArea, 0
+    )
+  );
+  const harvestedArea = Number(valueOf(fullTask?.harvestedArea, task?.harvestedArea, task?.totalHarvestedArea, 0));
+  const remainingHarvestArea = Math.max(0, totalPlanArea - harvestedArea);
+
+  const quarantineWarn = getTaskQuarantineWarning(fullTask || task, history);
 
   const taskId = getEntityId(task);
   const draftKey = taskId ? `farm-leader:daily-log-draft:${taskId}` : null;
@@ -100,7 +125,7 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
       try {
         const raw = await AsyncStorage.getItem(localHistoryKey);
         if (raw) localSent = JSON.parse(raw);
-      } catch {}
+      } catch { }
     }
 
     if (isOffline) {
@@ -211,11 +236,50 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
     setFertilizers([]);
     setPesticides([]);
     setImages([]);
+    setHarvestQuantity('');
+    setHarvestUnit('kg');
+    setExecutedArea('');
+    setHarvestUnitPickerOpen(false);
     setPickerType(null);
     setUnitPickerTarget(null);
     setCatalogErrors({});
     setHistory([]);
     setLoadingCatalogs(true);
+    setFullTask(task);
+
+    if (taskId && !isOffline) {
+      api.get(`/cultivation-tasks/${taskId}`)
+        .then(async (res) => {
+          const d = unwrapPayload(res.data) || res.data?.data || res.data || {};
+          if (d) {
+            setFullTask((prev) => ({ ...prev, ...d }));
+
+            const hasArea = valueOf(
+              d.landPlot?.area, d.landPlot?.totalArea, d.landPlotArea, d.area, d.totalArea,
+              d.cultivationLogbook?.landPlot?.area, d.cultivationLogbook?.area,
+              d.cultivationPlan?.landPlot?.area, d.cultivationPlan?.area
+            );
+
+            if (!hasArea) {
+              const plotIdToFetch = d.landPlotId || d.plotId || task?.landPlotId || plan?.landPlotId;
+              if (plotIdToFetch) {
+                try {
+                  const pRes = await api.get(`/land-plots/${plotIdToFetch}`);
+                  const pData = unwrapPayload(pRes.data) || pRes.data?.data || pRes.data || {};
+                  if (pData && (pData.area || pData.totalArea)) {
+                    setFullTask((prev) => ({
+                      ...prev,
+                      landPlot: pData,
+                      landPlotArea: pData.area || pData.totalArea,
+                    }));
+                  }
+                } catch {}
+              }
+            }
+          }
+        })
+        .catch(() => {});
+    }
 
     if (draftKey) {
       AsyncStorage.getItem(draftKey).then((storedDraft) => {
@@ -237,7 +301,7 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
         syncAllPendingLogs({ force: true })
           .then(() => loadPendingLogs())
           .then(() => fetchHistory())
-          .catch(() => {});
+          .catch(() => { });
       }
     });
 
@@ -249,10 +313,10 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
         const nextCatalogs = { fertilizer: [], pesticide: [] };
         let usedCache = false;
         if (fertRes.status === 'fulfilled' && fertRes.value) {
-          try { nextCatalogs.fertilizer = JSON.parse(fertRes.value); usedCache = true; } catch {}
+          try { nextCatalogs.fertilizer = JSON.parse(fertRes.value); usedCache = true; } catch { }
         }
         if (pestRes.status === 'fulfilled' && pestRes.value) {
-          try { nextCatalogs.pesticide = JSON.parse(pestRes.value); usedCache = true; } catch {}
+          try { nextCatalogs.pesticide = JSON.parse(pestRes.value); usedCache = true; } catch { }
         }
         setCatalogs(nextCatalogs);
         setCatalogFromCache(usedCache);
@@ -290,7 +354,7 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
 
       if (fertilizerResult.status === 'fulfilled') {
         nextCatalogs.fertilizer = fertilizerResult.value || [];
-        AsyncStorage.setItem(CATALOG_CACHE_KEY.fertilizer, JSON.stringify(nextCatalogs.fertilizer)).catch(() => {});
+        AsyncStorage.setItem(CATALOG_CACHE_KEY.fertilizer, JSON.stringify(nextCatalogs.fertilizer)).catch(() => { });
       } else {
         nextErrors.fertilizer = fertilizerResult.reason?.response?.status === 403
           ? 'Tài khoản chưa được cấp quyền xem danh mục phân bón.'
@@ -299,7 +363,7 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
 
       if (pesticideResult.status === 'fulfilled') {
         nextCatalogs.pesticide = pesticideResult.value || [];
-        AsyncStorage.setItem(CATALOG_CACHE_KEY.pesticide, JSON.stringify(nextCatalogs.pesticide)).catch(() => {});
+        AsyncStorage.setItem(CATALOG_CACHE_KEY.pesticide, JSON.stringify(nextCatalogs.pesticide)).catch(() => { });
       } else {
         nextErrors.pesticide = getApiErrorMessage(pesticideResult.reason, 'Không thể tải danh mục thuốc BVTV.');
       }
@@ -316,6 +380,10 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
 
   const resetAndClose = () => {
     Keyboard.dismiss();
+    setHarvestQuantity('');
+    setHarvestUnit('kg');
+    setExecutedArea('');
+    setHarvestUnitPickerOpen(false);
     setPickerType(null);
     setUnitPickerTarget(null);
     onClose();
@@ -339,7 +407,15 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
     if (!draftKey) return;
     setSaving(true);
     try {
-      await AsyncStorage.setItem(draftKey, JSON.stringify({ description, fertilizers, pesticides, images }));
+      await AsyncStorage.setItem(draftKey, JSON.stringify({
+        description,
+        fertilizers,
+        pesticides,
+        images,
+        harvestQuantity,
+        harvestUnit,
+        executedArea,
+      }));
       resetAndClose();
       Alert.alert('Đã lưu nháp', 'Nội dung được lưu trên thiết bị và sẽ tự khôi phục khi bạn mở lại công việc này.');
     } catch {
@@ -350,20 +426,24 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
   };
 
   const addMaterial = (item) => {
-    const id = getEntityId(item);
+    const name = catalogName(item) || 'Vật tư';
+    const rawMaterialId = valueOf(item.id, item.fertilizerId, item.pesticideId, item.materialId, item.code, item.name);
+    const rowId = `row-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const defaultUnit = pickerType === 'fertilizer' ? 'kg' : 'ml';
-    const initialUnit = valueOf(item.unit, item.defaultUnit, defaultUnit);
+    const initialUnit = valueOf(item.unit, item.defaultUnit, item.unitName, item.unitOfMeasure, item.measurementUnit, defaultUnit);
     const setter = pickerType === 'fertilizer' ? setFertilizers : setPesticides;
-    setter((current) => {
-      if (current.some((entry) => entry.id === id)) return current;
-      return [...current, {
-        id,
-        name: catalogName(item),
+
+    setter((current) => [
+      ...current,
+      {
+        id: rowId,
+        materialId: rawMaterialId ? String(rawMaterialId) : rowId,
+        name,
         quantity: '',
         unit: initialUnit,
         area: '',
-      }];
-    });
+      },
+    ]);
     setPickerType(null);
   };
 
@@ -413,7 +493,8 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
   };
 
   const toRequestMaterials = (items, type) => items.map((item) => ({
-    id: item.id,
+    id: item.materialId || item.id,
+    materialId: item.materialId || item.id,
     quantity: Number(item.quantity),
     unit: item.unit?.trim() || (type === 'fertilizer' ? 'kg' : 'ml'),
     area: item.area ? Number(item.area) : null,
@@ -423,6 +504,20 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
     if (!description.trim()) {
       Alert.alert('Thiếu chi tiết công việc', 'Vui lòng nhập nội dung công việc đã thực hiện.');
       return;
+    }
+
+    if (isHarvest) {
+      if (!harvestQuantity || Number(harvestQuantity) <= 0) {
+        Alert.alert('Sản lượng chưa hợp lệ ⚠️', 'Vui lòng nhập số lượng thu hoạch lớn hơn 0.');
+        return;
+      }
+      if (executedArea && remainingHarvestArea > 0 && Number(executedArea) > remainingHarvestArea) {
+        Alert.alert(
+          'Diện tích thu hoạch quá giới hạn ⚠️',
+          `Diện tích nhập (${executedArea} m²) vượt quá diện tích còn lại chưa thu hoạch (${remainingHarvestArea} m²).`
+        );
+        return;
+      }
     }
 
     const invalidMaterial = [...fertilizers, ...pesticides].find((item) => !item.id || !item.quantity || Number(item.quantity) <= 0);
@@ -446,6 +541,12 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
           fertilizers: fertilizers.map((f) => ({ ...f, unit: f.unit || 'kg' })),
           pesticides: pesticides.map((p) => ({ ...p, unit: p.unit || 'ml' })),
           imageAssets: images,
+          ...(isHarvest ? {
+            harvestQuantity: Number(harvestQuantity),
+            harvestUnit,
+            executedArea: executedArea ? Number(executedArea) : undefined,
+            activityType: 'HARVESTING',
+          } : {}),
         };
 
         await offlineQueue.enqueue(offlineEntry);
@@ -455,6 +556,9 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
         setFertilizers([]);
         setPesticides([]);
         setImages([]);
+        setHarvestQuantity('');
+        setHarvestUnit('kg');
+        setExecutedArea('');
 
         await loadPendingLogs();
 
@@ -502,6 +606,12 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
           caption: 'Ảnh hiện trường',
           metadata: img.metadata || null,
         })),
+        ...(isHarvest ? {
+          harvestQuantity: Number(harvestQuantity),
+          harvestUnit,
+          executedArea: executedArea ? Number(executedArea) : undefined,
+          activityType: 'HARVESTING',
+        } : {}),
       };
 
       const logEndpoints = [
@@ -553,53 +663,104 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
     }
   };
 
-  const renderMaterialRows = (type, items) => items.map((item) => (
-    <View key={item.id} style={styles.materialCard}>
-      <View style={styles.materialHeader}>
-        <Text style={styles.materialName}>{item.name}</Text>
-        <TouchableOpacity onPress={() => removeMaterial(type, item.id)} hitSlop={8}>
-          <Feather name="trash-2" size={18} color="#dc2626" />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.materialInputs}>
-        <TextInput
-          style={[styles.smallInput, { flex: 1.1 }]}
-          value={item.quantity}
-          onChangeText={(value) => updateMaterial(type, item.id, 'quantity', value)}
-          placeholder="Số lượng *"
-          placeholderTextColor="#94a3b8"
-          keyboardType="decimal-pad"
-        />
+  const renderMaterialRows = (type, items) => items.map((item, index) => {
+    const enteredArea = Number(item.area || 0);
 
-        {/* Dropdown Đơn vị */}
-        <TouchableOpacity
-          style={styles.unitDropdownButton}
-          onPress={() => setUnitPickerTarget({ type, id: item.id, currentUnit: item.unit || (type === 'fertilizer' ? 'kg' : 'ml') })}
-        >
-          <Text style={styles.unitDropdownText} numberOfLines={1}>
-            {item.unit || (type === 'fertilizer' ? 'kg' : 'ml')}
+    // 1. Tính tổng diện tích đã ghi nhận cho loại vật tư này trong lịch sử các ngày trước
+    const historyUsedArea = history.reduce((sum, log) => {
+      const logMaterials = type === 'fertilizer'
+        ? (log.fertilizers || log.materials || [])
+        : (log.pesticides || log.materials || []);
+
+      const matched = (Array.isArray(logMaterials) ? logMaterials : []).find((m) => {
+        const mName = valueOf(m.name, m.materialName, m.fertilizerName, m.pesticideName);
+        const mId = getEntityId(m) || m.id || m.materialId;
+        return (mId && (mId === item.materialId || mId === item.id)) || (mName && mName === item.name);
+      });
+
+      return sum + Number(matched?.area || 0);
+    }, 0);
+
+    // 2. Lấy diện tích đất/vùng trồng từ task, plan, landPlot từ server (VD: totalPlanArea: 181.1)
+    const rawPlotArea = valueOf(
+      fullTask?.totalPlanArea, fullTask?.plannedArea, fullTask?.planArea,
+      fullTask?.landPlot?.area, fullTask?.landPlot?.totalArea, fullTask?.landPlotArea,
+      fullTask?.cultivationLogbook?.totalPlanArea, fullTask?.cultivationLogbook?.landPlot?.area, fullTask?.cultivationLogbook?.area,
+      fullTask?.cultivationPlan?.totalPlanArea, fullTask?.cultivationPlan?.landPlot?.area, fullTask?.cultivationPlan?.area,
+      fullTask?.logbook?.totalPlanArea, fullTask?.logbook?.landPlot?.area, fullTask?.logbook?.area,
+      fullTask?.remainingArea, fullTask?.remainingLandArea, fullTask?.area, fullTask?.totalArea,
+      fullTask?.plotArea,
+      task?.totalPlanArea, task?.plannedArea, task?.planArea,
+      task?.landPlot?.area, task?.landPlot?.totalArea, task?.landPlotArea,
+      task?.cultivationLogbook?.totalPlanArea, task?.cultivationLogbook?.landPlot?.area, task?.cultivationLogbook?.area,
+      task?.cultivationPlan?.totalPlanArea, task?.cultivationPlan?.landPlot?.area, task?.cultivationPlan?.area,
+      task?.logbook?.totalPlanArea, task?.logbook?.landPlot?.area, task?.logbook?.area,
+      task?.remainingArea, task?.remainingLandArea, task?.area, task?.totalArea, task?.plotArea,
+      plan?.totalPlanArea, plan?.plannedArea, plan?.planArea,
+      plan?.landPlot?.area, plan?.landPlot?.totalArea, plan?.landPlotArea,
+      plan?.area, plan?.totalArea, plan?.plotArea,
+      item.remainingArea, item.catalogRemainingArea
+    );
+
+    const plotArea = (rawPlotArea !== undefined && rawPlotArea !== null && rawPlotArea !== '' && !isNaN(rawPlotArea))
+      ? Number(rawPlotArea)
+      : 0;
+
+    const baseRemainingArea = Math.max(0, plotArea - historyUsedArea);
+    const currentRemaining = Math.max(0, baseRemainingArea - enteredArea);
+
+    return (
+      <View key={item.id} style={styles.materialCard}>
+        <View style={styles.materialHeader}>
+          <Text style={styles.materialName}>
+            <Text style={{ color: '#15803d', fontWeight: '800' }}>{type === 'fertilizer' ? `Loại ${index + 1}: ` : `Thuốc ${index + 1}: `}</Text>
+            {item.name}
           </Text>
-          <Feather name="chevron-down" size={14} color="#64748b" />
-        </TouchableOpacity>
+          <TouchableOpacity onPress={() => removeMaterial(type, item.id)} hitSlop={8}>
+            <Feather name="trash-2" size={18} color="#dc2626" />
+          </TouchableOpacity>
+        </View>
 
-        {/* Ô nhập Diện tích + nhãn ha (disable) */}
-        <View style={styles.areaContainer}>
+        {/* Hiển thị thông tin Diện tích còn lại m2 màu xanh lá chuẩn 100% như Web */}
+        <Text style={styles.materialRemainingText}>
+          Diện tích còn lại: <Text style={styles.materialRemainingValue}>{formatNumber(currentRemaining)} m2</Text>
+        </Text>
+
+        <View style={styles.materialInputs}>
           <TextInput
-            style={[styles.smallInput, { flex: 1 }]}
-            value={item.area}
-            onChangeText={(value) => updateMaterial(type, item.id, 'area', value)}
-            placeholder="Diện tích"
+            style={[styles.smallInput, { flex: 1.1 }]}
+            value={item.quantity}
+            onChangeText={(value) => updateMaterial(type, item.id, 'quantity', value)}
+            placeholder="Lượng *"
             placeholderTextColor="#94a3b8"
             keyboardType="decimal-pad"
           />
-          <View style={styles.disabledUnitBadge}>
-            <Text style={styles.disabledUnitText}>ha</Text>
-            <Feather name="chevron-down" size={12} color="#94a3b8" />
+
+          {/* Tự động điền đơn vị có sẵn từ vật tư (kg/ml) */}
+          <View style={styles.autoUnitBadge}>
+            <Text style={styles.autoUnitText} numberOfLines={1}>
+              {item.unit || (type === 'fertilizer' ? 'kg' : 'ml')}
+            </Text>
+          </View>
+
+          {/* Ô nhập Diện tích + nhãn m2 cố định */}
+          <View style={styles.areaContainer}>
+            <TextInput
+              style={[styles.smallInput, { flex: 1 }]}
+              value={item.area}
+              onChangeText={(value) => updateMaterial(type, item.id, 'area', value)}
+              placeholder="Diện tích"
+              placeholderTextColor="#94a3b8"
+              keyboardType="decimal-pad"
+            />
+            <View style={styles.disabledUnitBadge}>
+              <Text style={styles.disabledUnitText}>m2</Text>
+            </View>
           </View>
         </View>
       </View>
-    </View>
-  ));
+    );
+  });
 
   const selectedCatalog = pickerType ? catalogs[pickerType] : [];
   const selectedError = pickerType ? catalogErrors[pickerType] : null;
@@ -651,6 +812,77 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
             <View style={styles.cacheBanner}>
               <Feather name="database" size={13} color="#6d28d9" />
               <Text style={styles.cacheBannerText}>Danh mục vật tư từ bộ nhớ đệm (offline)</Text>
+            </View>
+          ) : null}
+
+          {/* Cảnh báo thời gian cách ly nông dược */}
+          {quarantineWarn.hasWarning ? (
+            <View style={styles.quarantineBanner}>
+              <View style={styles.quarantineHeader}>
+                <Feather name="alert-triangle" size={18} color="#b91c1c" />
+                <Text style={styles.quarantineTitle}>Cảnh báo thời gian cách ly nông dược</Text>
+              </View>
+              <Text style={styles.quarantineText}>{quarantineWarn.message}</Text>
+            </View>
+          ) : null}
+
+          {/* FORM NHẬP THU HOẠCH (HARVESTING) */}
+          {isHarvest ? (
+            <View style={[styles.section, styles.harvestSection]}>
+              <View style={styles.harvestHeader}>
+                <Feather name="shopping-bag" size={18} color="#15803d" />
+                <Text style={[styles.sectionTitle, { color: '#15803d', marginBottom: 0 }]}>
+                  Nhập sản lượng & diện tích thu hoạch
+                </Text>
+              </View>
+
+              {totalPlanArea > 0 ? (
+                <View style={styles.harvestSummaryBox}>
+                  <Text style={styles.harvestSummaryText}>
+                    Diện tích quy hoạch: <Text style={{ fontWeight: '700' }}>{totalPlanArea} m2</Text> | Đã thu: <Text style={{ fontWeight: '700' }}>{harvestedArea} m2</Text>
+                  </Text>
+                  <Text style={[styles.harvestSummaryText, { color: remainingHarvestArea > 0 ? '#15803d' : '#dc2626', marginTop: 2 }]}>
+                    Còn lại có thể thu hoạch: <Text style={{ fontWeight: '800' }}>{remainingHarvestArea} m2</Text>
+                  </Text>
+                </View>
+              ) : null}
+
+              <View style={styles.harvestRow}>
+                <View style={{ flex: 1.6 }}>
+                  <Text style={styles.label}>Sản lượng thu hoạch <Text style={styles.required}>*</Text></Text>
+                  <TextInput
+                    style={styles.input}
+                    value={harvestQuantity}
+                    onChangeText={setHarvestQuantity}
+                    placeholder="Nhập số lượng..."
+                    placeholderTextColor="#94a3b8"
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.label}>Đơn vị</Text>
+                  <TouchableOpacity
+                    style={styles.unitDropdownButton}
+                    onPress={() => setHarvestUnitPickerOpen(true)}
+                  >
+                    <Text style={styles.unitDropdownText}>{harvestUnit}</Text>
+                    <Feather name="chevron-down" size={14} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.label}>Diện tích thu hoạch thực tế (m2)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={executedArea}
+                  onChangeText={setExecutedArea}
+                  placeholder={remainingHarvestArea > 0 ? `Tối đa ${remainingHarvestArea} m2...` : 'Nhập diện tích m2...'}
+                  placeholderTextColor="#94a3b8"
+                  keyboardType="decimal-pad"
+                />
+              </View>
             </View>
           ) : null}
 
@@ -878,9 +1110,6 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
         </ScrollView>
 
         <View style={styles.footer}>
-          <TouchableOpacity style={[styles.footerButton, styles.draftButton]} onPress={saveDraft} disabled={saving}>
-            <Text style={styles.draftText}>Lưu nháp</Text>
-          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.footerButton, isOffline ? styles.offlineButton : styles.submitButton]}
             onPress={submit}
@@ -891,7 +1120,7 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
             ) : (
               <View style={styles.submitInner}>
                 {isOffline && <Feather name="wifi-off" size={14} color="#fff" style={{ marginRight: 6 }} />}
-                <Text style={styles.submitText}>{isOffline ? 'Lưu offline' : 'Lưu & Gửi'}</Text>
+                <Text style={styles.submitText}>{isOffline ? 'Lưu offline' : 'Lưu nhật ký'}</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -968,6 +1197,40 @@ export default function DailyLogModal({ visible, task, onClose, onSaved }) {
             </View>
           </View>
         ) : null}
+
+        {/* Harvest Unit Picker Modal */}
+        <Modal visible={harvestUnitPickerOpen} transparent animationType="fade" onRequestClose={() => setHarvestUnitPickerOpen(false)}>
+          <Pressable style={styles.pickerOverlay} onPress={() => setHarvestUnitPickerOpen(false)}>
+            <View style={styles.pickerSheet}>
+              <View style={styles.pickerHeader}>
+                <Text style={styles.pickerTitle}>Chọn đơn vị thu hoạch</Text>
+                <TouchableOpacity onPress={() => setHarvestUnitPickerOpen(false)}>
+                  <Feather name="x" size={20} color="#334155" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ maxHeight: 280 }}>
+                {HARVEST_UNITS.map((u) => {
+                  const isSelected = harvestUnit === u;
+                  return (
+                    <TouchableOpacity
+                      key={u}
+                      style={[styles.unitOptionItem, isSelected && styles.unitOptionSelected]}
+                      onPress={() => {
+                        setHarvestUnit(u);
+                        setHarvestUnitPickerOpen(false);
+                      }}
+                    >
+                      <Text style={[styles.unitOptionText, isSelected && styles.unitOptionTextSelected]}>
+                        {u}
+                      </Text>
+                      {isSelected ? <Feather name="check" size={16} color="#15803d" /> : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </Pressable>
+        </Modal>
 
         <FieldCameraScreen
           visible={cameraOpen}
@@ -1167,4 +1430,64 @@ const styles = StyleSheet.create({
   offlineNoteText: { color: '#92400e', fontSize: 11, fontStyle: 'italic' },
   deletePendingButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 6 },
   deletePendingText: { color: '#dc2626', fontSize: 12, fontWeight: '700' },
+  // QUARANTINE & HARVEST STYLES
+  quarantineBanner: { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fca5a5', borderRadius: 12, padding: 12, marginBottom: 13, gap: 6 },
+  quarantineHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  quarantineTitle: { fontSize: 14, fontWeight: '800', color: '#991b1b' },
+  quarantineText: { fontSize: 13, color: '#b91c1c', lineHeight: 18 },
+  harvestSection: { borderWidth: 1, borderColor: '#86efac', backgroundColor: '#f0fdf4' },
+  harvestHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  harvestSummaryBox: { backgroundColor: '#ffffff', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#bbf7d0', marginBottom: 12 },
+  harvestSummaryText: { fontSize: 12, color: '#166534', lineHeight: 18 },
+  harvestRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  autoUnitBadge: {
+    height: 44,
+    minWidth: 54,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 9,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  autoUnitText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  materialRemainingText: {
+    color: '#475569',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  materialRemainingValue: {
+    color: '#16a34a',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  areaContainer: {
+    flex: 1.2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  disabledUnitBadge: {
+    height: 44,
+    minWidth: 44,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 9,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  disabledUnitText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '700',
+  },
 });
