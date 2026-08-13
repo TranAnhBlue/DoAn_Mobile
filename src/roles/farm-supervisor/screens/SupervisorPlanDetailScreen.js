@@ -21,6 +21,7 @@ import { formatNumber, resolveAvatarUrl } from '../../../shared/utils/format';
 import supervisorApi from '../api/supervisorApi';
 import AssignmentModal from '../components/AssignmentModal';
 import CreateTaskModal from '../components/CreateTaskModal';
+import EditTaskModal from '../components/EditTaskModal';
 import InlineStageTaskForm from '../components/InlineStageTaskForm';
 
 const TABS = [
@@ -82,6 +83,7 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
   const [imageViewer, setImageViewer] = useState({ visible: false, images: [], index: 0 });
   const [createTaskModalVisible, setCreateTaskModalVisible] = useState(false);
   const [inlineFormOpen, setInlineFormOpen] = useState(false);
+  const [editTaskModal, setEditTaskModal] = useState({ visible: false, task: null });
 
   const fetchDetail = useCallback(async () => {
     if (!planId) return;
@@ -541,18 +543,24 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
             <View style={styles.taskTop}><Text style={styles.taskName}>{task.name}</Text><View style={[styles.statusBadge, { backgroundColor: `${color}18` }]}><Text style={[styles.statusText, { color }]}>{label}</Text></View><Feather name="chevron-right" size={18} color="#94a3b8" /></View>
             {task.description ? <Text style={styles.taskDescription}>{task.description}</Text> : null}
             <View style={styles.assignmentLine}><Feather name="users" size={14} color="#15803d" /><Text style={styles.assignmentText}>{task.assignedLeaderName || 'Chưa có Tổ trưởng'}{assignmentCount ? ` · ${assignmentCount} nông dân` : ''}</Text></View>
-            {!['COMPLETED', 'CANCELLED', 'IN_PROGRESS'].includes(state) ? (
-              <View style={styles.taskActions}>
-                <TouchableOpacity style={[styles.taskButton, styles.assignButton]} onPress={(event) => { event.stopPropagation(); setSelectedTask(task); }}>
-                  <Feather name="user-plus" size={15} color="#2563eb" />
-                  <Text style={styles.assignText}>Phân công</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.taskButton, styles.startButton]} onPress={(event) => { event.stopPropagation(); startTask(task); }}>
-                  <Feather name="play" size={15} color="#fff" />
-                  <Text style={styles.startText}>Kích hoạt</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
+            <View style={styles.taskActions}>
+              <TouchableOpacity style={[styles.taskButton, { backgroundColor: '#f1f5f9' }]} onPress={(event) => { event.stopPropagation(); setEditTaskModal({ visible: true, task }); }}>
+                <Feather name="edit-3" size={14} color="#475569" />
+                <Text style={[styles.assignText, { color: '#475569' }]}>Sửa</Text>
+              </TouchableOpacity>
+              {!['COMPLETED', 'CANCELLED', 'IN_PROGRESS'].includes(state) ? (
+                <>
+                  <TouchableOpacity style={[styles.taskButton, styles.assignButton]} onPress={(event) => { event.stopPropagation(); setSelectedTask(task); }}>
+                    <Feather name="user-plus" size={15} color="#2563eb" />
+                    <Text style={styles.assignText}>Phân công</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.taskButton, styles.startButton]} onPress={(event) => { event.stopPropagation(); startTask(task); }}>
+                    <Feather name="play" size={15} color="#fff" />
+                    <Text style={styles.startText}>Kích hoạt</Text>
+                  </TouchableOpacity>
+                </>
+              ) : null}
+            </View>
           </TouchableOpacity>
         );
       })}
@@ -988,6 +996,17 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
       </ScrollView>
 
       <AssignmentModal visible={Boolean(selectedTask)} task={selectedTask} users={users} saving={saving} onClose={() => setSelectedTask(null)} onSave={saveAssignment} />
+
+      <EditTaskModal
+        visible={editTaskModal.visible}
+        task={editTaskModal.task}
+        users={users}
+        onClose={() => setEditTaskModal({ visible: false, task: null })}
+        onSuccess={() => {
+          setEditTaskModal({ visible: false, task: null });
+          fetchDetail();
+        }}
+      />
 
       <Modal visible={logModal.visible} transparent animationType="fade" onRequestClose={() => setLogModal({ visible: false, log: null, action: 'approve', comment: '' })}>
         <View style={styles.modalOverlay}>

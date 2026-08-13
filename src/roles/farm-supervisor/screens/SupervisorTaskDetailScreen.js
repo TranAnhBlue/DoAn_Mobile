@@ -7,6 +7,7 @@ import { extractItems, getApiErrorMessage, getEntityId, unwrapPayload } from '..
 import { formatVietnamDateTime } from '../../../features/notifications/utils/dateTime';
 import supervisorApi from '../api/supervisorApi';
 import AssignmentModal from '../components/AssignmentModal';
+import EditTaskModal from '../components/EditTaskModal';
 
 const STATUS = {
   PENDING: ['Chờ kích hoạt', '#64748b'],
@@ -34,6 +35,7 @@ export default function SupervisorTaskDetailScreen({ navigation, route }) {
   const [refreshing, setRefreshing] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
 
   const fetchDetail = useCallback(async () => {
@@ -109,12 +111,18 @@ export default function SupervisorTaskDetailScreen({ navigation, route }) {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionHeading}>Nhân sự thực hiện</Text>
-          {!['COMPLETED', 'CANCELLED'].includes(status) ? (
-            <TouchableOpacity style={styles.assignAction} onPress={() => setAssigning(true)}>
-              <Feather name="user-plus" size={15} color="#2563eb" />
-              <Text style={styles.assignActionText}>Phân công</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {!['COMPLETED', 'CANCELLED'].includes(status) ? (
+              <TouchableOpacity style={styles.assignAction} onPress={() => setAssigning(true)}>
+                <Feather name="user-plus" size={15} color="#2563eb" />
+                <Text style={styles.assignActionText}>Phân công</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity style={[styles.assignAction, { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1' }]} onPress={() => setEditing(true)}>
+              <Feather name="edit-3" size={15} color="#475569" />
+              <Text style={[styles.assignActionText, { color: '#475569' }]}>Sửa</Text>
             </TouchableOpacity>
-          ) : null}
+          </View>
         </View>
         <View style={styles.card}>
           <TouchableOpacity style={styles.personRow} disabled={!task?.assignedLeaderId} onPress={() => navigation.navigate('FarmerDetail', { userId: task.assignedLeaderId })}>
@@ -141,6 +149,16 @@ export default function SupervisorTaskDetailScreen({ navigation, route }) {
       </ScrollView>
 
       <AssignmentModal visible={assigning} task={task} users={users} saving={saving} onClose={() => setAssigning(false)} onSave={saveAssignment} />
+      <EditTaskModal
+        visible={editing}
+        task={task}
+        users={users}
+        onClose={() => setEditing(false)}
+        onSuccess={() => {
+          setEditing(false);
+          fetchDetail();
+        }}
+      />
     </View>
   );
 }
