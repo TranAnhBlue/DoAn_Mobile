@@ -34,3 +34,21 @@ export function formatVietnamDateTime(value, fallback = '') {
     hour12: false,
   }).format(date);
 }
+
+/**
+ * Định dạng ngày chuẩn múi giờ Việt Nam (Asia/Ho_Chi_Minh = UTC+7) chỉ lấy ngày tháng năm.
+ * @param {string|Date|null|undefined} value
+ * @param {string} fallback
+ * @returns {string} ví dụ: "22/07/2026"
+ */
+export function formatDateVN(value, fallback = '') {
+  const date = parseServerDateTime(value);
+  if (!date) return fallback;
+
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
+}

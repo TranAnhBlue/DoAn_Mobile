@@ -19,7 +19,7 @@ import {
   View,
 } from 'react-native';
 
-import { formatVietnamDateTime } from '../../../features/notifications/utils/dateTime';
+import { formatDateVN, formatVietnamDateTime } from '../../../features/notifications/utils/dateTime';
 import api from '../../../shared/api/client';
 import { extractItems, getApiErrorMessage, getEntityId, unwrapPayload } from '../../../shared/api/response';
 import VoiceInputButton from '../../../shared/components/VoiceInputButton';
@@ -37,7 +37,7 @@ const CATALOG_CACHE_KEY = {
 
 const FERTILIZER_UNITS = ['kg', 'g', 'tấn', 'lít', 'ml', 'bao', 'can', 'gói'];
 const PESTICIDE_UNITS = ['ml', 'lít', 'g', 'kg', 'chai', 'gói', 'can', 'bình'];
-const HARVEST_UNITS = ['kg', 'tấn', 'lít', 'tạ', 'yến', 'gói', 'bao', 'thùng', 'trái', 'quả', 'giỏ'];
+const HARVEST_UNITS = ['kg', 'lít'];
 
 const valueOf = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
 
@@ -73,9 +73,8 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
 
   const activityType = String(task?.activityType || task?.type || task?.category || '').toUpperCase();
   const taskTitle = String(task?.taskName || task?.title || task?.name || '').toLowerCase();
-  // isHarvest chỉ dựa vào activityType HARVESTING từ server (task tự gen), không dùng tên task
-  // để tránh "Xử lý sau thu hoạch" bị nhận nhầm
-  const isHarvest = activityType === 'HARVESTING';
+  // isHarvest nhận diện task Thu hoạch tự gen (HARVESTING hoặc tên "Thu hoạch", loại trừ "Sau thu hoạch")
+  const isHarvest = activityType === 'HARVESTING' || taskTitle.trim() === 'thu hoạch' || (taskTitle.includes('thu hoạch') && !taskTitle.includes('sau thu hoạch') && !taskTitle.includes('trước thu hoạch'));
 
   const totalPlanArea = Number(
     valueOf(
@@ -84,8 +83,18 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
       plan?.totalPlanArea, plan?.plannedArea, plan?.planArea, plan?.area, plan?.totalArea, plan?.plotArea, 0
     )
   );
-  const harvestedArea = Number(valueOf(fullTask?.harvestedArea, task?.harvestedArea, task?.totalHarvestedArea, 0));
-  const remainingHarvestArea = Math.max(0, totalPlanArea - harvestedArea);
+  const historyHarvestedArea = history.reduce((sum, log) => {
+    const logArea = Number(valueOf(log.executedArea, log.harvestedArea, log.area, 0));
+    return sum + (isNaN(logArea) ? 0 : logArea);
+  }, 0);
+
+  const serverHarvestedArea = Number(valueOf(fullTask?.harvestedArea, task?.harvestedArea, task?.totalHarvestedArea, 0));
+  const totalHarvestedArea = Math.max(historyHarvestedArea, serverHarvestedArea);
+
+  const baseRemainingHarvestArea = Math.max(0, totalPlanArea - totalHarvestedArea);
+  const enteredHarvestArea = Number(executedArea || 0);
+  const currentRemainingHarvestArea = Math.max(0, baseRemainingHarvestArea - enteredHarvestArea);
+  const isHarvestAreaExceeded = baseRemainingHarvestArea > 0 && enteredHarvestArea > baseRemainingHarvestArea;
 
   const quarantineWarn = getTaskQuarantineWarning(fullTask || task, history);
 
@@ -513,10 +522,14 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
         Alert.alert('Sản lượng chưa hợp lệ ⚠️', 'Vui lòng nhập số lượng thu hoạch lớn hơn 0.');
         return;
       }
-      if (executedArea && remainingHarvestArea > 0 && Number(executedArea) > remainingHarvestArea) {
+      if (!executedArea || Number(executedArea) <= 0) {
+        Alert.alert('Diện tích chưa hợp lệ ⚠️', 'Vui lòng nhập diện tích thu hoạch thực tế lớn hơn 0.');
+        return;
+      }
+      if (baseRemainingHarvestArea > 0 && Number(executedArea) > baseRemainingHarvestArea) {
         Alert.alert(
           'Diện tích thu hoạch quá giới hạn ⚠️',
-          `Diện tích nhập (${executedArea} m²) vượt quá diện tích còn lại chưa thu hoạch (${remainingHarvestArea} m²).`
+          `Diện tích nhập (${executedArea} m²) vượt quá diện tích còn lại chưa thu hoạch (${formatNumber(baseRemainingHarvestArea)} m²).`
         );
         return;
       }
@@ -627,9 +640,11 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
       let success = false;
       let lastError = null;
 
+      let serverResponseMsg = '';
       for (const endpoint of logEndpoints) {
         try {
-          await api.post(endpoint, logPayload);
+          const res = await api.post(endpoint, logPayload);
+          serverResponseMsg = res.data?.message || res.data?.title || '';
           success = true;
           break;
         } catch (err) {
@@ -657,7 +672,10 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
       await saveToLocalSentHistory(sentItem);
 
       resetAndClose();
-      Alert.alert('Thành công 🎉', 'Đã lưu và gửi ghi chép công việc.');
+      Alert.alert(
+        'Thành công 🎉',
+        serverResponseMsg || 'Đã lưu và gửi ghi chép công việc.'
+      );
       onSaved?.();
     } catch (error) {
       Alert.alert('Không thể gửi ghi chép', getApiErrorMessage(error, 'Vui lòng thử lại.'));
@@ -847,68 +865,24 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
             </View>
           ) : null}
 
-          {/* FORM NHẬP THU HOẠCH (HARVESTING) */}
-          {isHarvest ? (
-            <View style={[styles.section, styles.harvestSection]}>
-              <View style={styles.harvestHeader}>
-                <Feather name="shopping-bag" size={18} color="#15803d" />
-                <Text style={[styles.sectionTitle, { color: '#15803d', marginBottom: 0 }]}>
-                  Nhập sản lượng & diện tích thu hoạch
+          {/* 1. KHỐI NỘI DUNG THỰC HIỆN (HIỂN THỊ ĐẦU TIÊN THEO CHUẨN WEB) */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <Feather name="edit-3" size={16} color="#15803d" />
+              <Text style={styles.sectionTitle}>Nội dung thực hiện</Text>
+            </View>
+
+            {/* Ngày ghi nhận */}
+            <View style={{ marginBottom: 12 }}>
+              <Text style={styles.label}>Ngày ghi nhận <Text style={styles.required}>*</Text></Text>
+              <View style={styles.dateDisplayCard}>
+                <Feather name="calendar" size={15} color="#64748b" style={{ marginRight: 8 }} />
+                <Text style={styles.dateDisplayText}>
+                  {formatDateVN(new Date().toISOString())}
                 </Text>
               </View>
-
-              {totalPlanArea > 0 ? (
-                <View style={styles.harvestSummaryBox}>
-                  <Text style={styles.harvestSummaryText}>
-                    Diện tích quy hoạch: <Text style={{ fontWeight: '700' }}>{totalPlanArea} m2</Text> | Đã thu: <Text style={{ fontWeight: '700' }}>{harvestedArea} m2</Text>
-                  </Text>
-                  <Text style={[styles.harvestSummaryText, { color: remainingHarvestArea > 0 ? '#15803d' : '#dc2626', marginTop: 2 }]}>
-                    Còn lại có thể thu hoạch: <Text style={{ fontWeight: '800' }}>{remainingHarvestArea} m2</Text>
-                  </Text>
-                </View>
-              ) : null}
-
-              <View style={styles.harvestRow}>
-                <View style={{ flex: 1.6 }}>
-                  <Text style={styles.label}>Sản lượng thu hoạch <Text style={styles.required}>*</Text></Text>
-                  <TextInput
-                    style={styles.input}
-                    value={harvestQuantity}
-                    onChangeText={setHarvestQuantity}
-                    placeholder="Nhập số lượng..."
-                    placeholderTextColor="#94a3b8"
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.label}>Đơn vị</Text>
-                  <TouchableOpacity
-                    style={styles.unitDropdownButton}
-                    onPress={() => setHarvestUnitPickerOpen(true)}
-                  >
-                    <Text style={styles.unitDropdownText}>{harvestUnit}</Text>
-                    <Feather name="chevron-down" size={14} color="#64748b" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={{ marginTop: 12 }}>
-                <Text style={styles.label}>Diện tích thu hoạch thực tế (m2)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={executedArea}
-                  onChangeText={setExecutedArea}
-                  placeholder={remainingHarvestArea > 0 ? `Tối đa ${remainingHarvestArea} m2...` : 'Nhập diện tích m2...'}
-                  placeholderTextColor="#94a3b8"
-                  keyboardType="decimal-pad"
-                />
-              </View>
             </View>
-          ) : null}
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Nội dung thực hiện</Text>
             {task?.description ? <Text style={styles.taskDescription}>{task.description}</Text> : null}
             <View style={styles.labelRow}>
               <Text style={styles.label}>Chi tiết công việc <Text style={styles.required}>*</Text></Text>
@@ -926,12 +900,89 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
               style={[styles.input, styles.textarea]}
               value={description}
               onChangeText={setDescription}
-              placeholder="Mô tả tình hình cây trồng, công việc đã làm và vấn đề phát sinh..."
-              placeholderTextColor="#64748b"
+              placeholder="Mô tả tình hình cây trồng, vấn đề phát sinh..."
+              placeholderTextColor="#94a3b8"
               multiline
               textAlignVertical="top"
             />
           </View>
+
+          {/* 2. KHỐI DỮ LIỆU THU HOẠCH (KHI LÀ TASK THU HOẠCH - KHỚP 100% GIAO DIỆN WEB) */}
+          {isHarvest ? (
+            <View style={styles.section}>
+              <View style={styles.harvestDataHeader}>
+                <Text style={styles.sectionTitle}>Dữ liệu thu hoạch</Text>
+                <View style={[styles.remainingPillBadge, isHarvestAreaExceeded && styles.remainingPillBadgeError]}>
+                  <Text style={[styles.remainingPillText, isHarvestAreaExceeded && styles.remainingPillTextError]}>
+                    Còn lại: {formatNumber(currentRemainingHarvestArea)} m²
+                  </Text>
+                </View>
+              </View>
+
+              {/* 3 Cột: Số lượng thu hoạch | Đơn vị | Diện tích thu hoạch (m²) */}
+              <View style={styles.harvest3ColRow}>
+                <View style={{ flex: 1.1 }}>
+                  <View style={styles.harvestColLabelContainer}>
+                    <Text style={styles.harvestLabelText}>
+                      Số lượng thu hoạch <Text style={styles.required}>*</Text>
+                    </Text>
+                  </View>
+                  <TextInput
+                    style={[styles.input, styles.harvestInputBox]}
+                    value={harvestQuantity}
+                    onChangeText={setHarvestQuantity}
+                    placeholder="Số lượng"
+                    placeholderTextColor="#94a3b8"
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+
+                <View style={{ flex: 0.85 }}>
+                  <View style={styles.harvestColLabelContainer}>
+                    <Text style={styles.harvestLabelText}>
+                      Đơn vị <Text style={styles.required}>*</Text>
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.unitDropdownButton, styles.harvestInputBox]}
+                    onPress={() => setHarvestUnitPickerOpen(true)}
+                  >
+                    <Text style={styles.unitDropdownText}>{harvestUnit}</Text>
+                    <Feather name="chevron-down" size={14} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ flex: 1.15 }}>
+                  <View style={styles.harvestColLabelContainer}>
+                    <Text style={styles.harvestLabelText}>
+                      Diện tích (m²) <Text style={styles.required}>*</Text>
+                    </Text>
+                  </View>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      styles.harvestInputBox,
+                      isHarvestAreaExceeded && styles.inputError,
+                    ]}
+                    value={executedArea}
+                    onChangeText={setExecutedArea}
+                    placeholder="Diện tích"
+                    placeholderTextColor="#94a3b8"
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
+
+              {isHarvestAreaExceeded ? (
+                <View style={styles.harvestAreaWarningRow}>
+                  <Feather name="alert-circle" size={13} color="#dc2626" />
+                  <Text style={styles.harvestAreaWarningText}>
+                    Diện tích nhập ({executedArea} m²) vượt quá diện tích còn lại ({formatNumber(baseRemainingHarvestArea)} m²).
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
 
           {/* Phân bón & Thuốc BVTV: ẩn khi task Thu hoạch (HARVESTING) */}
           {!isHarvest ? (
@@ -1520,5 +1571,117 @@ const styles = StyleSheet.create({
     color: '#334155',
     fontSize: 13,
     fontWeight: '700',
+  },
+  harvestTopRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  dateDisplayCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 9,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  dateDisplayText: {
+    color: '#334155',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  smallImageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#86efac',
+    borderStyle: 'dashed',
+    borderRadius: 9,
+    paddingHorizontal: 12,
+    height: 44,
+    justifyContent: 'center',
+  },
+  smallImageBtnText: {
+    color: '#15803d',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  harvestDataHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  remainingPillBadge: {
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#86efac',
+  },
+  remainingPillText: {
+    color: '#15803d',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  harvest3ColRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  harvestColLabelContainer: {
+    minHeight: 38,
+    justifyContent: 'flex-end',
+    marginBottom: 6,
+  },
+  harvestLabelText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1e293b',
+    lineHeight: 18,
+  },
+  harvestInputBox: {
+    height: 48,
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: '#94a3b8',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+  },
+  remainingPillBadgeError: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fca5a5',
+  },
+  remainingPillTextError: {
+    color: '#dc2626',
+  },
+  inputError: {
+    borderColor: '#dc2626',
+    backgroundColor: '#fff5f5',
+  },
+  harvestAreaWarningRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 8,
+    backgroundColor: '#fef2f2',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+  },
+  harvestAreaWarningText: {
+    color: '#b91c1c',
+    fontSize: 12,
+    fontWeight: '700',
+    flex: 1,
   },
 });
