@@ -939,6 +939,15 @@ export default function MyTasksScreen({ navigation, route }) {
         });
 
       setPlans(builtPlans);
+
+      // Tự động đồng bộ selectedPlan với dữ liệu mới nhất từ server
+      setSelectedPlan((prevSelected) => {
+        if (!prevSelected) return null;
+        const updated = builtPlans.find(
+          (p) => String(p.id) === String(prevSelected.id) || String(p.name).toLowerCase().trim() === String(prevSelected.name || '').toLowerCase().trim()
+        );
+        return updated || prevSelected;
+      });
     } catch (requestError) {
       setError(getApiErrorMessage(requestError, 'Không thể tải công việc.'));
     } finally {
@@ -1075,11 +1084,15 @@ export default function MyTasksScreen({ navigation, route }) {
     );
   });
 
-  const currentTasksList = selectedPlan
-    ? (selectedPlan.tasks && selectedPlan.tasks.length ? selectedPlan.tasks : tasks.filter((t) => {
+  const activePlan = selectedPlan
+    ? (plans.find((p) => String(p.id) === String(selectedPlan.id) || String(p.name).toLowerCase().trim() === String(selectedPlan.name || '').toLowerCase().trim()) || selectedPlan)
+    : null;
+
+  const currentTasksList = activePlan
+    ? (activePlan.tasks && activePlan.tasks.length ? activePlan.tasks : tasks.filter((t) => {
       const pId = String(t.cultivationLogbookId || t.logbookId || t.planId || '');
       const pName = String(valueOf(t.planName, t.logbookName, t.cropName, '') || '').toLowerCase();
-      return pId === String(selectedPlan.id) || pName === String(selectedPlan.name || '').toLowerCase();
+      return pId === String(activePlan.id) || pName === String(activePlan.name || '').toLowerCase();
     }))
     : tasks;
 
@@ -1097,11 +1110,11 @@ export default function MyTasksScreen({ navigation, route }) {
     return true;
   });
 
-  const planTasksForQuarantine = selectedPlan
-    ? (selectedPlan.tasks && selectedPlan.tasks.length ? selectedPlan.tasks : tasks.filter((t) => {
+  const planTasksForQuarantine = activePlan
+    ? (activePlan.tasks && activePlan.tasks.length ? activePlan.tasks : tasks.filter((t) => {
       const pId = String(t.cultivationLogbookId || t.logbookId || t.planId || '');
       const pName = String(valueOf(t.planName, t.logbookName, t.cropName, '') || '').toLowerCase();
-      return pId === String(selectedPlan.id) || pName === String(selectedPlan.name || '').toLowerCase();
+      return pId === String(activePlan.id) || pName === String(activePlan.name || '').toLowerCase();
     }))
     : tasks;
 
