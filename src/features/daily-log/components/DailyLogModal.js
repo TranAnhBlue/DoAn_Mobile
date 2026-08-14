@@ -73,7 +73,9 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
 
   const activityType = String(task?.activityType || task?.type || task?.category || '').toUpperCase();
   const taskTitle = String(task?.taskName || task?.title || task?.name || '').toLowerCase();
-  const isHarvest = activityType === 'HARVESTING' || taskTitle.includes('thu hoạch') || taskTitle.includes('harvest');
+  // isHarvest chỉ dựa vào activityType HARVESTING từ server (task tự gen), không dùng tên task
+  // để tránh "Xử lý sau thu hoạch" bị nhận nhầm
+  const isHarvest = activityType === 'HARVESTING';
 
   const totalPlanArea = Number(
     valueOf(
@@ -427,7 +429,7 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
 
   const addMaterial = (item) => {
     const name = catalogName(item) || 'Vật tư';
-    const rawMaterialId = valueOf(item.id, item.fertilizerId, item.pesticideId, item.materialId, item.code, item.name);
+    const rawMaterialId = valueOf(item.materialId, item.fertilizerId, item.pesticideId, item.id, item.code);
     const rowId = `row-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const defaultUnit = pickerType === 'fertilizer' ? 'kg' : 'ml';
     const initialUnit = valueOf(item.unit, item.defaultUnit, item.unitName, item.unitOfMeasure, item.measurementUnit, defaultUnit);
@@ -583,8 +585,8 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
       const reqPesticides = toRequestMaterials(pesticides, 'pesticide');
 
       const logPayload = {
-        taskId,
-        cultivationTaskId: taskId,
+        taskId,                    // /cultivation-daily-logs dùng "taskId" để tìm task
+        cultivationTaskId: taskId, // các endpoint khác dùng "cultivationTaskId"
         cultivationLogbookId: task?.cultivationLogbookId || task?.logbookId || undefined,
         landPlotId: task?.landPlotId || task?.plotId || undefined,
         date: new Date().toISOString(),
@@ -596,8 +598,8 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
         fertilizers: reqFertilizers,
         pesticides: reqPesticides,
         materials: [
-          ...reqFertilizers.map((m) => ({ materialId: m.id, quantity: m.quantity, unit: m.unit, area: m.area })),
-          ...reqPesticides.map((m) => ({ materialId: m.id, quantity: m.quantity, unit: m.unit, area: m.area })),
+          ...reqFertilizers.map((m) => ({ materialId: m.materialId || m.id, quantity: m.quantity, unit: m.unit, area: m.area })),
+          ...reqPesticides.map((m) => ({ materialId: m.materialId || m.id, quantity: m.quantity, unit: m.unit, area: m.area })),
         ],
         images: uploadedImages.map((img) => ({
           id: img.id || '',
@@ -614,13 +616,13 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
         } : {}),
       };
 
+      // /cultivation-daily-logs là endpoint đúng (yêu cầu taskId trong body)
+      // thử lần lượt các endpoint, dừng khi thành công
       const logEndpoints = [
+        '/cultivation-daily-logs',
         `/cultivation-tasks/${taskId}/daily-logs`,
         `/cultivation-tasks/${taskId}/logs`,
-        '/cultivation-daily-logs',
         '/cultivation-logs',
-        '/api/cultivation-daily-logs',
-        '/api/cultivation-logs',
       ];
       let success = false;
       let lastError = null;
@@ -632,6 +634,7 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
           break;
         } catch (err) {
           lastError = err;
+          // Chỉ bỏ qua lỗi 404 (endpoint không tồn tại), lỗi khác thì dừng ngay
           if (err?.response?.status !== 404) throw err;
         }
       }
@@ -758,6 +761,24 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
             </View>
           </View>
         </View>
+
+        {/* Khuyến nghị lượng nông dược real-time */}
+        {item.quantity && Number(item.quantity) > 0 && item.area && Number(item.area) > 0 ? (
+          <View style={styles.recommendationBox}>
+            <Feather name="info" size={14} color="#92400e" style={{ marginRight: 6, marginTop: 1 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.recommendationTitle}>
+                {`Khuyến nghị lượng nông dược:`}
+              </Text>
+              <Text style={styles.recommendationText}>
+                {`${item.quantity} ${item.unit || (type === 'fertilizer' ? 'kg' : 'ml')} cho ${item.area} m2`}
+              </Text>
+              <Text style={styles.recommendationNote}>
+                Tính theo liều lượng đã khai báo trong chi tiết nông dược.
+              </Text>
+            </View>
+          </View>
+        ) : null}
       </View>
     );
   });
@@ -912,25 +933,30 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
             />
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Phân bón</Text>
-            {catalogErrors.fertilizer ? <Text style={styles.warning}>{catalogErrors.fertilizer}</Text> : null}
-            {renderMaterialRows('fertilizer', fertilizers)}
-            <TouchableOpacity style={styles.addButton} onPress={() => setPickerType('fertilizer')} disabled={loadingCatalogs}>
-              {loadingCatalogs ? <ActivityIndicator color="#15803d" /> : <Feather name="plus" size={18} color="#15803d" />}
-              <Text style={styles.addButtonText}>Thêm phân bón</Text>
-            </TouchableOpacity>
-          </View>
+          {/* Phân bón & Thuốc BVTV: ẩn khi task Thu hoạch (HARVESTING) */}
+          {!isHarvest ? (
+            <>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Phân bón</Text>
+                {catalogErrors.fertilizer ? <Text style={styles.warning}>{catalogErrors.fertilizer}</Text> : null}
+                {renderMaterialRows('fertilizer', fertilizers)}
+                <TouchableOpacity style={styles.addButton} onPress={() => { Keyboard.dismiss(); setPickerType('fertilizer'); }} disabled={loadingCatalogs}>
+                  {loadingCatalogs ? <ActivityIndicator color="#15803d" /> : <Feather name="plus" size={18} color="#15803d" />}
+                  <Text style={styles.addButtonText}>Thêm phân bón</Text>
+                </TouchableOpacity>
+              </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Thuốc bảo vệ thực vật</Text>
-            {catalogErrors.pesticide ? <Text style={styles.warning}>{catalogErrors.pesticide}</Text> : null}
-            {renderMaterialRows('pesticide', pesticides)}
-            <TouchableOpacity style={styles.addButton} onPress={() => setPickerType('pesticide')} disabled={loadingCatalogs}>
-              {loadingCatalogs ? <ActivityIndicator color="#15803d" /> : <Feather name="plus" size={18} color="#15803d" />}
-              <Text style={styles.addButtonText}>Thêm thuốc BVTV</Text>
-            </TouchableOpacity>
-          </View>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Thuốc bảo vệ thực vật</Text>
+                {catalogErrors.pesticide ? <Text style={styles.warning}>{catalogErrors.pesticide}</Text> : null}
+                {renderMaterialRows('pesticide', pesticides)}
+                <TouchableOpacity style={styles.addButton} onPress={() => { Keyboard.dismiss(); setPickerType('pesticide'); }} disabled={loadingCatalogs}>
+                  {loadingCatalogs ? <ActivityIndicator color="#15803d" /> : <Feather name="plus" size={18} color="#15803d" />}
+                  <Text style={styles.addButtonText}>Thêm thuốc BVTV</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : null}
 
           <View style={styles.section}>
             <View style={styles.imageHeader}>
@@ -1435,6 +1461,11 @@ const styles = StyleSheet.create({
   quarantineHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   quarantineTitle: { fontSize: 14, fontWeight: '800', color: '#991b1b' },
   quarantineText: { fontSize: 13, color: '#b91c1c', lineHeight: 18 },
+  recommendationBox: { flexDirection: 'row', backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fcd34d', borderRadius: 10, padding: 10, marginTop: 8, alignItems: 'flex-start' },
+  recommendationTitle: { fontSize: 13, fontWeight: '700', color: '#92400e', marginBottom: 2 },
+  recommendationText: { fontSize: 14, fontWeight: '800', color: '#78350f', marginBottom: 2 },
+  recommendationNote: { fontSize: 11, color: '#a16207', lineHeight: 15 },
+
   harvestSection: { borderWidth: 1, borderColor: '#86efac', backgroundColor: '#f0fdf4' },
   harvestHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   harvestSummaryBox: { backgroundColor: '#ffffff', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#bbf7d0', marginBottom: 12 },
