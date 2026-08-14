@@ -192,9 +192,10 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
   const currentUser = useAuthStore((state) => state.user);
   const currentUserAvatar = resolveAvatarUrl(currentUser?.avatarUrl || currentUser?.avatar);
 
-  const assignments = (d.assignments || d.assignees || d.assignedUsers || d.members || d.teamMembers || d.workers || []).filter(Boolean);
-  const hasLeader = !!(d.assignedLeaderName || d.assignedLeaderId);
-  const memberCount = assignments.length + (hasLeader ? 1 : 0) || d.memberCount || d.assigneeCount || 0;
+  const rawAssignments = (d.assignments || d.assignees || d.assignedUsers || d.members || d.teamMembers || d.workers || []).filter(Boolean);
+  const leaderId = d.assignedLeaderId || d.leaderId || '';
+  const leaderName = (d.assignedLeaderName || d.leaderName || '').trim();
+  const hasLeader = !!(leaderName || leaderId);
 
   const rawLeaderAvatar = valueOf(
     d.assignedLeaderAvatar, d.assignedLeaderAvatarUrl,
@@ -204,23 +205,41 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
   );
   const leaderAvatar = resolveAvatarUrl(rawLeaderAvatar, currentUserAvatar);
 
-  const assignees = [
-    ...(hasLeader ? [{
-      fullName: d.assignedLeaderName || 'Farm Leader',
-      avatarUrl: leaderAvatar,
-      isLeader: true,
-      role: 'FARM_LEADER',
-    }] : []),
-    ...assignments.map((a) => ({
-      fullName: valueOf(a.fullName, a.farmerName, a.userName, a.name, 'Nông dân'),
+  // Parse all members from assignments with deduplication
+  const parsedAssignments = rawAssignments.map((a) => {
+    const fullName = valueOf(a.fullName, a.farmerName, a.userName, a.name, 'Nông dân');
+    const aId = valueOf(a.userId, a.id, a.farmerId, '');
+    const isLeader = a.role === 'FARM_LEADER' || a.isLeader || (leaderId && aId === leaderId) || (leaderName && fullName.toLowerCase() === leaderName.toLowerCase());
+    return {
+      id: aId,
+      fullName,
       avatarUrl: resolveAvatarUrl(valueOf(
         a.avatarUrl, a.avatar, a.imageUrl, a.photoUrl, a.photo, a.image,
         a.user?.avatar, a.user?.avatarUrl, a.farmer?.avatar, a.farmer?.avatarUrl
       )),
-      isLeader: a.role === 'FARM_LEADER' || a.isLeader,
-      role: a.role || 'FARMER',
-    })),
+      isLeader,
+      role: isLeader ? 'FARM_LEADER' : (a.role || 'FARMER'),
+    };
+  });
+
+  // Check if leader already exists in parsedAssignments
+  const leaderInAssignments = parsedAssignments.some((a) => a.isLeader || (leaderName && a.fullName.toLowerCase() === leaderName.toLowerCase()));
+
+  const assignees = [
+    ...(hasLeader && !leaderInAssignments ? [{
+      id: leaderId,
+      fullName: leaderName || 'Farm Leader',
+      avatarUrl: leaderAvatar,
+      isLeader: true,
+      role: 'FARM_LEADER',
+    }] : []),
+    ...parsedAssignments,
   ];
+
+  // Sắp xếp để Tổ trưởng luôn đứng đầu danh sách
+  assignees.sort((a, b) => (b.isLeader ? 1 : 0) - (a.isLeader ? 1 : 0));
+
+  const memberCount = assignees.length || d.memberCount || d.assigneeCount || 0;
 
   const submitInlineLog = useCallback(async () => {
     if (!logDesc.trim()) { Alert.alert('Thiếu thông tin', 'Vui lòng nhập chi tiết công việc.'); return; }
@@ -523,14 +542,14 @@ function TaskDetailScreen({ task, onClose, onRefreshParent }) {
                 <Text style={ds.secondarySummaryBtnText}>Hoàn thành & Gửi Summary</Text>
               </TouchableOpacity>
             </View>
-          ) : (
+          ) : (state === 'COMPLETED' || state === 'WAITING_APPROVAL' || state === 'PENDING_APPROVAL') ? (
             <View style={ds.bottomStickyBar}>
               <TouchableOpacity style={ds.primaryLogBtn} onPress={() => setSummaryModalVisible(true)}>
                 <Feather name="file-text" size={17} color="#fff" />
                 <Text style={ds.primaryLogBtnText}>Xem báo cáo tổng hợp đã gửi</Text>
               </TouchableOpacity>
             </View>
-          )}
+          ) : null}
         </View>
       )}
     </View>
