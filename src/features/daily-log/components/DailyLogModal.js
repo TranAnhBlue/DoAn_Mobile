@@ -43,9 +43,14 @@ const valueOf = (...values) => values.find((value) => value !== undefined && val
 
 const catalogName = (item) => valueOf(item.name, item.fertilizerName, item.pesticideName, item.tradeName, item.code, 'Vật tư');
 
-export default function DailyLogModal({ visible, task, plan, onClose, onSaved }) {
+export default function DailyLogModal({ visible, task, plan, onClose, onSaved, onSuccess }) {
   const { isConnected } = useNetworkStatus();
   const isOffline = isConnected === false;
+
+  const notifySaved = useCallback(() => {
+    onSaved?.();
+    onSuccess?.();
+  }, [onSaved, onSuccess]);
 
   const [fullTask, setFullTask] = useState(task);
   const [description, setDescription] = useState('');
@@ -178,12 +183,51 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
         }
       }
 
-      const serverIds = new Set(serverItems.map((s) => getEntityId(s) || s.id));
-      const uniqueLocal = localSent.filter((l) => !serverIds.has(l.id));
+      const getSignature = (item) => {
+        const desc = String(valueOf(item.description, item.notes, item.content, '')).trim();
+        const rawDate = valueOf(item.createdAt, item.activityDate, item.logDate, item.date, '');
+        const dateStr = String(rawDate || '').slice(0, 16);
+        return `${desc}_${dateStr}`;
+      };
+
+      const serverSignatures = new Set(serverItems.map(getSignature).filter(Boolean));
+      const serverIds = new Set(serverItems.map((s) => String(getEntityId(s) || s.id || '')).filter(Boolean));
+
+      const uniqueLocal = (Array.isArray(localSent) ? localSent : []).filter((l) => {
+        const lId = String(getEntityId(l) || l.id || '');
+        if (lId && serverIds.has(lId)) return false;
+        const sig = getSignature(l);
+        if (sig && serverSignatures.has(sig)) return false;
+        return true;
+      });
+
+      // Nếu server đã có danh sách các bản ghi này, dọn dẹp các bản ghi đã đồng bộ trong AsyncStorage
+      if (localHistoryKey) {
+        if (serverItems.length > 0 && uniqueLocal.length === 0) {
+          AsyncStorage.removeItem(localHistoryKey).catch(() => { });
+        } else if (uniqueLocal.length < localSent.length) {
+          AsyncStorage.setItem(localHistoryKey, JSON.stringify(uniqueLocal)).catch(() => { });
+        }
+      }
+
       const combined = sortLogsDescending([...serverItems, ...uniqueLocal]);
 
-      setHistory(combined);
-      return combined;
+      // Deduplicate danh sách cuối cùng để đảm bảo không bị trùng lặp
+      const seenIds = new Set();
+      const seenSigs = new Set();
+      const finalHistory = [];
+      for (const item of combined) {
+        const id = String(getEntityId(item) || item.id || '');
+        const sig = getSignature(item);
+        if (id && seenIds.has(id)) continue;
+        if (sig && seenSigs.has(sig)) continue;
+        if (id) seenIds.add(id);
+        if (sig) seenSigs.add(sig);
+        finalHistory.push(item);
+      }
+
+      setHistory(finalHistory);
+      return finalHistory;
     } catch (err) {
       console.warn('[DailyLogModal] Lỗi tải lịch sử:', err?.message);
       const sortedLocal = sortLogsDescending(localSent);
@@ -209,7 +253,7 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
 
       if (synced > 0 && failed === 0) {
         Alert.alert('Thành công 🎉', `Đã đồng bộ ${synced} ghi chép offline lên server.`);
-        onSaved?.();
+        notifySaved();
       } else if (failed > 0) {
         const errorMsg = errors[0]?.message || 'Lỗi không xác định';
         Alert.alert(
@@ -582,7 +626,7 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
           'Ghi chép đã được lưu an toàn trên máy. Bạn có thể xem lại ở mục "Ghi chép chờ đồng bộ (Offline)" bên dưới.',
           [{ text: 'OK' }]
         );
-        onSaved?.();
+        notifySaved();
         return;
       }
 
@@ -607,7 +651,6 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
         description: description.trim(),
         content: description.trim(),
         notes: description.trim(),
-        progress: 100,
         fertilizers: reqFertilizers,
         pesticides: reqPesticides,
         materials: [
@@ -664,7 +707,6 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
         id: `sent-${Date.now()}`,
         date: logPayload.date,
         description: logPayload.description,
-        progress: 100,
         fertilizers,
         pesticides,
         images: uploadedImages,
@@ -676,7 +718,7 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved })
         'Thành công 🎉',
         serverResponseMsg || 'Đã lưu và gửi ghi chép công việc.'
       );
-      onSaved?.();
+      notifySaved();
     } catch (error) {
       Alert.alert('Không thể gửi ghi chép', getApiErrorMessage(error, 'Vui lòng thử lại.'));
     } finally {
