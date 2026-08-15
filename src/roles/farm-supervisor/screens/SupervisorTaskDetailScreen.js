@@ -84,10 +84,20 @@ export default function SupervisorTaskDetailScreen({ navigation, route }) {
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#15803d" /></View>;
 
-  const status = String(task?.status || '').toUpperCase();
+  const rawStatus = valueOf(task?.status?.name, task?.status?.code, task?.status, task?.taskStatus, task?.state, '');
+  const status = String(rawStatus || '').toUpperCase().trim();
   const [statusLabel, statusColor] = STATUS[status] || [task?.status || 'Không rõ', '#64748b'];
   const progress = Number(task?.progress || 0);
   const assignments = task?.assignments || [];
+
+  const isCompleted = ['COMPLETED', 'DONE', 'FINISHED', 'APPROVED'].includes(status) || status.includes('HOÀN THÀNH');
+  const isWaitingApproval = ['WAITING_APPROVAL', 'PENDING_APPROVAL', 'SUBMITTED', 'WAITING'].includes(status) || status.includes('CHỜ DUYỆT') || Boolean(task?.isSubmitted || task?.summarySubmitted);
+  const isInProgress = ['ACTIVE', 'IN_PROGRESS', 'DOING', 'EXECUTING'].includes(status) || status.includes('THỰC HIỆN') || (logs && logs.length > 0);
+  const hasLeader = Boolean(task?.assignedLeaderId || task?.assignedLeaderName);
+
+  const canEdit = !isCompleted && !isWaitingApproval && !isInProgress && !hasLeader && ['PENDING', 'PLANNED'].includes(status);
+  const canAssign = !isCompleted && !isWaitingApproval && !isInProgress && ['PENDING', 'PLANNED', 'ASSIGNED', 'ASSIGNED_LEADER'].includes(status);
+  const canStart = !isCompleted && !isWaitingApproval && !isInProgress && ['PENDING', 'PLANNED', 'ASSIGNED', 'ASSIGNED_LEADER'].includes(status);
 
   return (
     <View style={styles.container}>
@@ -112,16 +122,18 @@ export default function SupervisorTaskDetailScreen({ navigation, route }) {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionHeading}>Nhân sự thực hiện</Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            {!['COMPLETED', 'CANCELLED'].includes(status) ? (
+            {canAssign ? (
               <TouchableOpacity style={styles.assignAction} onPress={() => setAssigning(true)}>
                 <Feather name="user-plus" size={15} color="#2563eb" />
                 <Text style={styles.assignActionText}>Phân công</Text>
               </TouchableOpacity>
             ) : null}
-            <TouchableOpacity style={[styles.assignAction, { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1' }]} onPress={() => setEditing(true)}>
-              <Feather name="edit-3" size={15} color="#475569" />
-              <Text style={[styles.assignActionText, { color: '#475569' }]}>Sửa</Text>
-            </TouchableOpacity>
+            {canEdit ? (
+              <TouchableOpacity style={[styles.assignAction, { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1' }]} onPress={() => setEditing(true)}>
+                <Feather name="edit-3" size={15} color="#475569" />
+                <Text style={[styles.assignActionText, { color: '#475569' }]}>Sửa</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
         <View style={styles.card}>
@@ -135,7 +147,7 @@ export default function SupervisorTaskDetailScreen({ navigation, route }) {
           {!assignments.length ? <Text style={styles.noAssignment}>Chưa có nông dân tham gia.</Text> : null}
         </View>
 
-        {['PENDING', 'PLANNED'].includes(status) ? <TouchableOpacity style={styles.startButton} onPress={startTask}><Feather name="play" size={18} color="#fff" /><Text style={styles.startText}>Kích hoạt công việc</Text></TouchableOpacity> : null}
+        {canStart ? <TouchableOpacity style={styles.startButton} onPress={startTask}><Feather name="play" size={18} color="#fff" /><Text style={styles.startText}>Kích hoạt công việc</Text></TouchableOpacity> : null}
 
         <Text style={styles.sectionHeading}>Nhật ký hàng ngày ({logs.length})</Text>
         {logs.map((log, index) => (

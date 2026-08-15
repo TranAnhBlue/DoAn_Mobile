@@ -125,6 +125,37 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
     return stages.length > 0 && completedStagesCount === stages.length;
   }, [stages, completedStagesCount]);
 
+  const rawPlanStatus = valueOf(
+    plan?.status?.name, plan?.status?.code, plan?.status?.value, plan?.status?.statusName,
+    plan?.planStatus, plan?.state, plan?.approvalStatus, plan?.status, ''
+  );
+  const planStatus = String(rawPlanStatus || '').trim().toUpperCase();
+
+  const isPlanCompleted = useMemo(() => {
+    return (
+      plan?.isCompleted === true ||
+      plan?.isClosed === true ||
+      Boolean(plan?.completedAt) ||
+      Boolean(plan?.closedAt) ||
+      ['COMPLETED', 'CLOSED', 'FINISHED', 'DONE', 'APPROVED'].includes(planStatus) ||
+      planStatus.includes('HOÀN THÀNH') ||
+      planStatus.includes('ĐÃ ĐÓNG') ||
+      planStatus.includes('ĐÃ DUYỆT')
+    );
+  }, [plan, planStatus]);
+
+  const isPlanClosing = useMemo(() => {
+    return (
+      !isPlanCompleted &&
+      (plan?.isSubmitted === true ||
+        plan?.isClosingReview === true ||
+        plan?.isPendingApproval === true ||
+        ['CLOSING_REVIEW', 'WAITING_APPROVAL', 'PENDING_REVIEW', 'SUBMITTED', 'PENDING_APPROVAL', 'WAITING'].includes(planStatus) ||
+        planStatus.includes('CHỜ DUYỆT') ||
+        planStatus.includes('CHỜ ĐÓNG'))
+    );
+  }, [plan, planStatus, isPlanCompleted]);
+
   const isSelectedStageCompleted = useMemo(() => {
     const st = String(selectedStage?.status || '').toUpperCase();
     return st === 'COMPLETED' || selectedStage?.isCompleted === true;
@@ -535,45 +566,63 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
       ) : null}
       <Text style={styles.blockTitle}>Công việc ({tasks.length})</Text>
       {tasks.map((task) => {
-        const state = String(task.status || '').toUpperCase();
+        const rawStatus = valueOf(task?.status?.name, task?.status?.code, task?.status, task?.taskStatus, task?.state, '');
+        const state = String(rawStatus || '').toUpperCase().trim();
         const [label, color] = STATUS[state] || [task.status || 'Không rõ', '#64748b'];
         const assignmentCount = (task.assignments || []).length;
+        const hasLeader = Boolean(task.assignedLeaderId || task.assignedLeaderName);
+
+        const isCompleted = ['COMPLETED', 'DONE', 'FINISHED', 'APPROVED'].includes(state) || state.includes('HOÀN THÀNH');
+        const isWaitingApproval = ['WAITING_APPROVAL', 'PENDING_APPROVAL', 'SUBMITTED', 'WAITING'].includes(state) || state.includes('CHỜ DUYỆT') || Boolean(task?.isSubmitted || task?.summarySubmitted);
+        const isInProgress = ['ACTIVE', 'IN_PROGRESS', 'DOING', 'EXECUTING'].includes(state) || state.includes('THỰC HIỆN');
+
+        const canEdit = !isCompleted && !isWaitingApproval && !isInProgress && !hasLeader && ['PENDING', 'PLANNED'].includes(state);
+        const canAssign = !isCompleted && !isWaitingApproval && !isInProgress && ['PENDING', 'PLANNED', 'ASSIGNED', 'ASSIGNED_LEADER'].includes(state);
+        const canStart = !isCompleted && !isWaitingApproval && !isInProgress && ['PENDING', 'PLANNED', 'ASSIGNED', 'ASSIGNED_LEADER'].includes(state);
+        const hasActions = canEdit || canAssign || canStart;
+
         return (
           <TouchableOpacity key={getEntityId(task)} style={styles.taskCard} activeOpacity={0.8} onPress={() => navigation.navigate('SupervisorTaskDetail', { taskId: getEntityId(task), task })}>
             <View style={styles.taskTop}><Text style={styles.taskName}>{task.name}</Text><View style={[styles.statusBadge, { backgroundColor: `${color}18` }]}><Text style={[styles.statusText, { color }]}>{label}</Text></View><Feather name="chevron-right" size={18} color="#94a3b8" /></View>
             {task.description ? <Text style={styles.taskDescription}>{task.description}</Text> : null}
             <View style={styles.assignmentLine}><Feather name="users" size={14} color="#15803d" /><Text style={styles.assignmentText}>{task.assignedLeaderName || 'Chưa có Tổ trưởng'}{assignmentCount ? ` · ${assignmentCount} nông dân` : ''}</Text></View>
-            <View style={styles.taskActions}>
-              <TouchableOpacity style={[styles.taskButton, { backgroundColor: '#f1f5f9' }]} onPress={(event) => { event.stopPropagation(); setEditTaskModal({ visible: true, task }); }}>
-                <Feather name="edit-3" size={14} color="#475569" />
-                <Text style={[styles.assignText, { color: '#475569' }]}>Sửa</Text>
-              </TouchableOpacity>
-              {!['COMPLETED', 'CANCELLED', 'IN_PROGRESS'].includes(state) ? (
-                <>
+            {hasActions ? (
+              <View style={styles.taskActions}>
+                {canEdit ? (
+                  <TouchableOpacity style={[styles.taskButton, { backgroundColor: '#f1f5f9' }]} onPress={(event) => { event.stopPropagation(); setEditTaskModal({ visible: true, task }); }}>
+                    <Feather name="edit-3" size={14} color="#475569" />
+                    <Text style={[styles.assignText, { color: '#475569' }]}>Sửa</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {canAssign ? (
                   <TouchableOpacity style={[styles.taskButton, styles.assignButton]} onPress={(event) => { event.stopPropagation(); setSelectedTask(task); }}>
                     <Feather name="user-plus" size={15} color="#2563eb" />
                     <Text style={styles.assignText}>Phân công</Text>
                   </TouchableOpacity>
+                ) : null}
+                {canStart ? (
                   <TouchableOpacity style={[styles.taskButton, styles.startButton]} onPress={(event) => { event.stopPropagation(); startTask(task); }}>
                     <Feather name="play" size={15} color="#fff" />
                     <Text style={styles.startText}>Kích hoạt</Text>
                   </TouchableOpacity>
-                </>
-              ) : null}
-            </View>
+                ) : null}
+              </View>
+            ) : null}
           </TouchableOpacity>
         );
       })}
       {!tasks.length ? <Text style={styles.emptyText}>Chưa có công việc nào cho giai đoạn này.</Text> : null}
 
-      <TouchableOpacity
-        style={styles.addTaskBtn}
-        onPress={() => setInlineFormOpen((prev) => !prev)}
-        activeOpacity={0.8}
-      >
-        <Feather name={inlineFormOpen ? "minus" : "plus"} size={16} color="#15803d" />
-        <Text style={styles.addTaskBtnText}>Thêm công việc vào giai đoạn này</Text>
-      </TouchableOpacity>
+      {!isPlanCompleted && !isSelectedStageCompleted ? (
+        <TouchableOpacity
+          style={styles.addTaskBtn}
+          onPress={() => setInlineFormOpen((prev) => !prev)}
+          activeOpacity={0.8}
+        >
+          <Feather name={inlineFormOpen ? "minus" : "plus"} size={16} color="#15803d" />
+          <Text style={styles.addTaskBtnText}>Thêm công việc vào giai đoạn này</Text>
+        </TouchableOpacity>
+      ) : null}
 
       {inlineFormOpen ? (
         <InlineStageTaskForm
@@ -744,9 +793,8 @@ export default function SupervisorPlanDetailScreen({ navigation, route }) {
     const materials = summary?.materials || [];
     const images = summary?.images || [];
     const approved = summary?.approvedLogs || officialLogs || [];
-    const planStatus = String(plan?.status || '').toUpperCase();
-    const isClosing = ['CLOSING_REVIEW', 'WAITING_APPROVAL', 'PENDING_REVIEW', 'SUBMITTED'].includes(planStatus);
-    const isCompleted = planStatus === 'COMPLETED';
+    const isCompleted = isPlanCompleted;
+    const isClosing = isPlanClosing;
 
     return (
       <>
