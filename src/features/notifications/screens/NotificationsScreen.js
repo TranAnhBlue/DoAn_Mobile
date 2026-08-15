@@ -64,7 +64,10 @@ export default function NotificationsScreen({ navigation }) {
               activeOpacity={0.8}
               onPress={() => {
                 if (unread && id) markRead.mutate(id);
-                navigateToNotificationTarget(item, navigation, userRole);
+                navigation.navigate('NotificationDetail', {
+                  notification: item,
+                  notificationId: id,
+                });
               }}
             >
               <View style={styles.icon}>

@@ -24,7 +24,7 @@ import {
 import api from '../../../shared/api/client';
 import { getApiErrorMessage, getEntityId } from '../../../shared/api/response';
 import { normalizeStatus, valueOf } from '../../../shared/utils/data';
-import { formatDateVN, resolveAvatarUrl } from '../../../shared/utils/format';
+import { formatDateVN, formatNumber, resolveAvatarUrl } from '../../../shared/utils/format';
 import { aggregateMaterials } from '../utils/aggregateMaterials';
 
 const extractQuarantineMessage = (d) => {
@@ -65,6 +65,18 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
   const [serverSummary, setServerSummary] = useState(null);
   const taskId = getEntityId(task);
 
+  const activityType = String(
+    valueOf(task?.activityType, task?.type, task?.category, serverSummary?.activityType, serverSummary?.type, '')
+  ).toUpperCase();
+  const taskTitle = String(
+    valueOf(task?.taskName, task?.title, task?.name, serverSummary?.taskName, serverSummary?.name, '')
+  ).toLowerCase();
+  const isHarvest =
+    activityType === 'HARVESTING' ||
+    activityType === 'HARVEST' ||
+    taskTitle.trim() === 'thu hoạch' ||
+    (taskTitle.includes('thu hoạch') && !taskTitle.includes('sau thu hoạch') && !taskTitle.includes('trước thu hoạch'));
+
   useEffect(() => {
     if (!visible || !taskId) return;
 
@@ -92,7 +104,7 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
             if (qMsg) foundQuarantineError = qMsg;
             if (
               d.fertilizers || d.totalFertilizers || d.pesticides || d.totalPesticides ||
-              d.materials || d.actualStartDate || d.startDate || d.workStartDate
+              d.materials || d.harvestLogs || d.totalHarvestQuantity || d.actualStartDate || d.startDate || d.workStartDate
             ) {
               break;
             }
@@ -149,6 +161,65 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
   const startDateStr  = sTime ? formatDateVN(new Date(sTime)) : formatDateVN(new Date());
   const endDateStr    = eTime ? formatDateVN(new Date(eTime)) : startDateStr;
 
+  // ── Harvest Summary Rows & Totals ─────────────────────────────────────────
+  const rawHarvestLogs = (
+    Array.isArray(serverSummary?.harvestLogs) && serverSummary.harvestLogs.length > 0
+      ? serverSummary.harvestLogs
+      : Array.isArray(serverSummary?.harvests) && serverSummary.harvests.length > 0
+      ? serverSummary.harvests
+      : Array.isArray(serverSummary?.harvestDetails) && serverSummary.harvestDetails.length > 0
+      ? serverSummary.harvestDetails
+      : (history || [])
+  );
+
+  const harvestRows = (rawHarvestLogs || []).map((log, index) => {
+    const rawDate = valueOf(log.date, log.activityDate, log.logDate, log.createdAt, log.performedAt, log.workDate);
+    const dateStr = rawDate ? formatDateVN(rawDate) : '—';
+    const rawQty = valueOf(
+      log.harvestQuantity,
+      log.quantity,
+      log.totalQuantity,
+      log.harvestAmount,
+      log.harvestOutput,
+      log.amount,
+      log.weight,
+      log.output,
+      log.actualQuantity,
+      0
+    );
+    const qty = Number(rawQty) || 0;
+    const unit = String(valueOf(log.harvestUnit, log.unit, log.unitName, log.quantityUnit, 'kg'));
+    const rawArea = valueOf(
+      log.executedArea,
+      log.harvestedArea,
+      log.area,
+      log.plotArea,
+      log.appliedArea,
+      log.actualArea,
+      0
+    );
+    const area = Number(rawArea) || 0;
+
+    return {
+      id: getEntityId(log) || log.id || `harvest-row-${index}`,
+      rawDate,
+      dateStr,
+      quantity: qty,
+      unit,
+      area,
+    };
+  });
+
+  let totalHarvestQty = harvestRows.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+  let totalHarvestArea = harvestRows.reduce((sum, r) => sum + (Number(r.area) || 0), 0);
+  const harvestUnit = harvestRows.find((r) => r.unit)?.unit || valueOf(serverSummary?.harvestUnit, task?.harvestUnit, 'kg');
+
+  const serverTotalQty = Number(valueOf(serverSummary?.totalHarvestQuantity, serverSummary?.harvestQuantity, task?.totalHarvestQuantity, task?.harvestQuantity, 0));
+  const serverTotalArea = Number(valueOf(serverSummary?.totalHarvestedArea, serverSummary?.harvestedArea, task?.totalHarvestedArea, task?.harvestedArea, 0));
+
+  if (totalHarvestQty === 0 && serverTotalQty > 0) totalHarvestQty = serverTotalQty;
+  if (totalHarvestArea === 0 && serverTotalArea > 0) totalHarvestArea = serverTotalArea;
+
   // ── Collect proof images from history ────────────────────────────────────
   const proofImages = (history || []).flatMap((item) => {
     const rawImgs =
@@ -185,6 +256,25 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
       descriptionSummary: summaryNote.trim(),
       notes: summaryNote.trim(),
       completedAt: new Date().toISOString(),
+      ...(isHarvest ? {
+        activityType: 'HARVESTING',
+        harvestQuantity: totalHarvestQty,
+        totalHarvestQuantity: totalHarvestQty,
+        harvestUnit,
+        harvestedArea: totalHarvestArea,
+        totalHarvestedArea: totalHarvestArea,
+        executedArea: totalHarvestArea,
+        harvestLogs: harvestRows.map((r) => ({
+          date: r.rawDate || new Date().toISOString(),
+          harvestQuantity: r.quantity,
+          quantity: r.quantity,
+          harvestUnit: r.unit,
+          unit: r.unit,
+          executedArea: r.area,
+          harvestedArea: r.area,
+          area: r.area,
+        })),
+      } : {}),
     };
 
     const endpoints = [
@@ -279,7 +369,7 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
                 <Feather name={isAlreadySubmitted ? "file-text" : "send"} size={14} color="#15803d" />
               </View>
               <Text style={styles.headerTitle}>
-                {isAlreadySubmitted ? 'Chi tiết Báo cáo tổng hợp đã gửi' : 'Tạo Summary & Gửi báo cáo hoàn thành'}
+                {isAlreadySubmitted ? 'Chi tiết Báo cáo tổng hợp đã gửi' : 'Tạo bản tổng hợp & gửi báo cáo hoàn thành'}
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={8}>
@@ -315,153 +405,201 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
               </View>
             </View>
 
-            {/* Fertilizers table */}
-            <View style={styles.materialSection}>
-              <View style={styles.sectionHeaderRow}>
-                <Feather name="droplet" size={15} color="#15803d" />
-                <Text style={styles.sectionTitle}>
-                  Phân bón đã sử dụng
-                  {aggregated.fertilizers.length === 0 ? <Text style={styles.emptySubtext}> (chưa có dữ liệu)</Text> : null}
-                </Text>
-              </View>
-              <View style={styles.tableHeader}>
-                <Text style={[styles.th, { flex: 2 }]}>LOẠI PHÂN BÓN</Text>
-                <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>TỔNG LƯỢNG</Text>
-                <Text style={[styles.th, { flex: 1, textAlign: 'right' }]}>DIỆN TÍCH</Text>
-              </View>
-              {aggregated.fertilizers.length === 0 ? (
-                <View style={styles.emptyTableRow}>
-                  <Text style={styles.emptyTableText}>Chưa ghi nhận phân bón nào</Text>
+            {/* If Harvest task -> Show Harvest Summary Table */}
+            {isHarvest ? (
+              <View style={styles.materialSection}>
+                <View style={styles.sectionHeaderRow}>
+                  <Feather name="layers" size={15} color="#15803d" />
+                  <Text style={styles.sectionTitle}>
+                    Tổng hợp thu hoạch
+                    {harvestRows.length === 0 ? <Text style={styles.emptySubtext}> (chưa có dữ liệu)</Text> : null}
+                  </Text>
                 </View>
-              ) : (
-                aggregated.fertilizers.map((f, i) => (
-                  <View key={i} style={styles.tableRow}>
-                    <Text style={[styles.td, { flex: 2, fontWeight: '700', color: '#1e293b' }]}>{f.name}</Text>
-                    <Text style={[styles.td, { flex: 1, textAlign: 'center', color: '#1d4ed8', fontWeight: '800' }]}>
-                      {f.quantity} {f.unit}
-                    </Text>
-                    <Text style={[styles.td, { flex: 1, textAlign: 'right', color: '#475569' }]}>{f.area ? `${f.area} m²` : '—'}</Text>
-                  </View>
-                ))
-              )}
-            </View>
-
-            {/* Pesticides table */}
-            <View style={styles.materialSection}>
-              <View style={styles.sectionHeaderRow}>
-                <Feather name="shield" size={15} color="#9333ea" />
-                <Text style={styles.sectionTitle}>
-                  Nông dược đã sử dụng
-                  {aggregated.pesticides.length === 0 ? <Text style={styles.emptySubtext}> (chưa có dữ liệu)</Text> : null}
-                </Text>
-              </View>
-              <View style={styles.tableHeader}>
-                <Text style={[styles.th, { flex: 2 }]}>LOẠI NÔNG DƯỢC</Text>
-                <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>TỔNG LƯỢNG</Text>
-                <Text style={[styles.th, { flex: 1, textAlign: 'right' }]}>DIỆN TÍCH</Text>
-              </View>
-              {aggregated.pesticides.length === 0 ? (
-                <View style={styles.emptyTableRow}>
-                  <Text style={styles.emptyTableText}>Chưa ghi nhận nông dược nào</Text>
+                <View style={styles.tableHeader}>
+                  <Text style={[styles.th, { flex: 1.2 }]}>NGÀY</Text>
+                  <Text style={[styles.th, { flex: 1.5, textAlign: 'center' }]}>SỐ LƯỢNG THU HOẠCH</Text>
+                  <Text style={[styles.th, { flex: 1.3, textAlign: 'right' }]}>DIỆN TÍCH</Text>
                 </View>
-              ) : (
-                aggregated.pesticides.map((p, i) => (
-                  <View key={i} style={styles.tableRow}>
-                    <Text style={[styles.td, { flex: 2, fontWeight: '700', color: '#1e293b' }]}>{p.name}</Text>
-                    <Text style={[styles.td, { flex: 1, textAlign: 'center', color: '#9333ea', fontWeight: '800' }]}>
-                      {p.quantity} {p.unit}
-                    </Text>
-                    <Text style={[styles.td, { flex: 1, textAlign: 'right', color: '#475569' }]}>{p.area ? `${p.area} m²` : '—'}</Text>
+                {harvestRows.length === 0 ? (
+                  <View style={styles.emptyTableRow}>
+                    <Text style={styles.emptyTableText}>Chưa ghi nhận dữ liệu thu hoạch nào</Text>
                   </View>
-                ))
-              )}
-            </View>
+                ) : (
+                  <>
+                    {harvestRows.map((row, i) => (
+                      <View key={row.id || i} style={styles.tableRow}>
+                        <Text style={[styles.td, { flex: 1.2, color: '#1e293b', fontWeight: '500' }]}>{row.dateStr}</Text>
+                        <Text style={[styles.td, { flex: 1.5, textAlign: 'center', color: '#1e293b', fontWeight: '700' }]}>
+                          {formatNumber(row.quantity, 2)} {row.unit}
+                        </Text>
+                        <Text style={[styles.td, { flex: 1.3, textAlign: 'right', color: '#475569' }]}>
+                          {row.area ? `${formatNumber(row.area, 2)} m²` : '—'}
+                        </Text>
+                      </View>
+                    ))}
+                    <View style={styles.summaryRow}>
+                      <Text style={[styles.td, { flex: 1.2, fontWeight: '800', color: '#0f172a' }]}>Tổng hợp</Text>
+                      <Text style={[styles.td, { flex: 1.5, textAlign: 'center', color: '#15803d', fontWeight: '800' }]}>
+                        {formatNumber(totalHarvestQty, 2)} {harvestUnit}
+                      </Text>
+                      <Text style={[styles.td, { flex: 1.3, textAlign: 'right', color: '#0f172a', fontWeight: '800' }]}>
+                        {totalHarvestArea ? `${formatNumber(totalHarvestArea, 2)} m²` : '—'}
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </View>
+            ) : (
+              <>
+                {/* Fertilizers table */}
+                <View style={styles.materialSection}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Feather name="droplet" size={15} color="#15803d" />
+                    <Text style={styles.sectionTitle}>
+                      Phân bón đã sử dụng
+                      {aggregated.fertilizers.length === 0 ? <Text style={styles.emptySubtext}> (chưa có dữ liệu)</Text> : null}
+                    </Text>
+                  </View>
+                  <View style={styles.tableHeader}>
+                    <Text style={[styles.th, { flex: 2 }]}>LOẠI PHÂN BÓN</Text>
+                    <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>TỔNG LƯỢNG</Text>
+                    <Text style={[styles.th, { flex: 1, textAlign: 'right' }]}>DIỆN TÍCH</Text>
+                  </View>
+                  {aggregated.fertilizers.length === 0 ? (
+                    <View style={styles.emptyTableRow}>
+                      <Text style={styles.emptyTableText}>Chưa ghi nhận phân bón nào</Text>
+                    </View>
+                  ) : (
+                    aggregated.fertilizers.map((f, i) => (
+                      <View key={i} style={styles.tableRow}>
+                        <Text style={[styles.td, { flex: 2, fontWeight: '700', color: '#1e293b' }]}>{f.name}</Text>
+                        <Text style={[styles.td, { flex: 1, textAlign: 'center', color: '#1d4ed8', fontWeight: '800' }]}>
+                          {f.quantity} {f.unit}
+                        </Text>
+                        <Text style={[styles.td, { flex: 1, textAlign: 'right', color: '#475569' }]}>{f.area ? `${f.area} m²` : '—'}</Text>
+                      </View>
+                    ))
+                  )}
+                </View>
 
-            {/* Pesticide recommendation (Khớp 100% giao diện Web) */}
-            {(() => {
-              const recoItems = [];
-              const seenNames = new Set();
+                {/* Pesticides table */}
+                <View style={styles.materialSection}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Feather name="shield" size={15} color="#9333ea" />
+                    <Text style={styles.sectionTitle}>
+                      Nông dược đã sử dụng
+                      {aggregated.pesticides.length === 0 ? <Text style={styles.emptySubtext}> (chưa có dữ liệu)</Text> : null}
+                    </Text>
+                  </View>
+                  <View style={styles.tableHeader}>
+                    <Text style={[styles.th, { flex: 2 }]}>LOẠI NÔNG DƯỢC</Text>
+                    <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>TỔNG LƯỢNG</Text>
+                    <Text style={[styles.th, { flex: 1, textAlign: 'right' }]}>DIỆN TÍCH</Text>
+                  </View>
+                  {aggregated.pesticides.length === 0 ? (
+                    <View style={styles.emptyTableRow}>
+                      <Text style={styles.emptyTableText}>Chưa ghi nhận nông dược nào</Text>
+                    </View>
+                  ) : (
+                    aggregated.pesticides.map((p, i) => (
+                      <View key={i} style={styles.tableRow}>
+                        <Text style={[styles.td, { flex: 2, fontWeight: '700', color: '#1e293b' }]}>{p.name}</Text>
+                        <Text style={[styles.td, { flex: 1, textAlign: 'center', color: '#9333ea', fontWeight: '800' }]}>
+                          {p.quantity} {p.unit}
+                        </Text>
+                        <Text style={[styles.td, { flex: 1, textAlign: 'right', color: '#475569' }]}>{p.area ? `${p.area} m²` : '—'}</Text>
+                      </View>
+                    ))
+                  )}
+                </View>
 
-              const serverRecos = valueOf(
-                serverSummary?.pesticideRecommendations, serverSummary?.recommendations,
-                serverSummary?.pesticideDosages, task?.pesticideRecommendations, task?.recommendations
-              );
+                {/* Pesticide recommendation (Khớp 100% giao diện Web) */}
+                {(() => {
+                  const recoItems = [];
+                  const seenNames = new Set();
 
-              if (Array.isArray(serverRecos)) {
-                serverRecos.forEach((r) => {
-                  const name = valueOf(r.name, r.pesticideName, r.tradeName, r.materialName);
-                  const text = valueOf(r.recommendationText, r.recommendation, r.dosageRecommendation, r.recommendedDosage, r.dosage, r.instructions, r.text);
-                  if (name && text && !seenNames.has(name)) {
-                    seenNames.add(name);
-                    recoItems.push({ name, text: String(text) });
-                  } else if (name && (r.recommendedQuantity || r.recommendedArea) && !seenNames.has(name)) {
-                    seenNames.add(name);
-                    const qty = r.recommendedQuantity || 5;
-                    const unit = r.recommendedUnit || r.unit || 'kg';
-                    const area = r.recommendedArea || 5;
-                    recoItems.push({ name, text: `${name}: nên dùng ${qty} ${unit} cho ${area} m2` });
-                  }
-                });
-              }
-
-              if (recoItems.length === 0) {
-                aggregated.pesticides.forEach((p) => {
-                  const rec = valueOf(
-                    p.recommendationText, p.recommendation, p.dosageRecommendation, p.recommendedDosage,
-                    p.dosage, p.instructions, serverSummary?.pesticideRecommendation, task?.pesticideRecommendation
+                  const serverRecos = valueOf(
+                    serverSummary?.pesticideRecommendations, serverSummary?.recommendations,
+                    serverSummary?.pesticideDosages, task?.pesticideRecommendations, task?.recommendations
                   );
-                  if (rec && !seenNames.has(p.name)) {
-                    seenNames.add(p.name);
-                    recoItems.push({ name: p.name, text: String(rec) });
-                  } else if ((p.recommendedQuantity || p.recommendedArea) && !seenNames.has(p.name)) {
-                    seenNames.add(p.name);
-                    recoItems.push({
-                      name: p.name,
-                      text: `${p.name}: nên dùng ${p.recommendedQuantity} ${p.recommendedUnit || p.unit || 'kg'}${p.recommendedArea ? ` cho ${p.recommendedArea} m2` : ''}`
+
+                  if (Array.isArray(serverRecos)) {
+                    serverRecos.forEach((r) => {
+                      const name = valueOf(r.name, r.pesticideName, r.tradeName, r.materialName);
+                      const text = valueOf(r.recommendationText, r.recommendation, r.dosageRecommendation, r.recommendedDosage, r.dosage, r.instructions, r.text);
+                      if (name && text && !seenNames.has(name)) {
+                        seenNames.add(name);
+                        recoItems.push({ name, text: String(text) });
+                      } else if (name && (r.recommendedQuantity || r.recommendedArea) && !seenNames.has(name)) {
+                        seenNames.add(name);
+                        const qty = r.recommendedQuantity || 5;
+                        const unit = r.recommendedUnit || r.unit || 'kg';
+                        const area = r.recommendedArea || 5;
+                        recoItems.push({ name, text: `${name}: nên dùng ${qty} ${unit} cho ${area} m2` });
+                      }
                     });
                   }
-                });
-              }
 
-              if (recoItems.length === 0) return null;
+                  if (recoItems.length === 0) {
+                    aggregated.pesticides.forEach((p) => {
+                      const rec = valueOf(
+                        p.recommendationText, p.recommendation, p.dosageRecommendation, p.recommendedDosage,
+                        p.dosage, p.instructions, serverSummary?.pesticideRecommendation, task?.pesticideRecommendation
+                      );
+                      if (rec && !seenNames.has(p.name)) {
+                        seenNames.add(p.name);
+                        recoItems.push({ name: p.name, text: String(rec) });
+                      } else if ((p.recommendedQuantity || p.recommendedArea) && !seenNames.has(p.name)) {
+                        seenNames.add(p.name);
+                        recoItems.push({
+                          name: p.name,
+                          text: `${p.name}: nên dùng ${p.recommendedQuantity} ${p.recommendedUnit || p.unit || 'kg'}${p.recommendedArea ? ` cho ${p.recommendedArea} m2` : ''}`
+                        });
+                      }
+                    });
+                  }
 
-              return (
-                <View style={styles.recommendationBox}>
-                  <View style={styles.recommendationHeader}>
-                    <View style={styles.recommendationIconCircle}>
-                      <Feather name="info" size={12} color="#fff" />
+                  if (recoItems.length === 0) return null;
+
+                  return (
+                    <View style={styles.recommendationBox}>
+                      <View style={styles.recommendationHeader}>
+                        <View style={styles.recommendationIconCircle}>
+                          <Feather name="info" size={12} color="#fff" />
+                        </View>
+                        <Text style={styles.recommendationTitle}>Khuyến nghị lượng sử dụng nông dược</Text>
+                      </View>
+                      {recoItems.map((item, idx) => (
+                        <Text key={idx} style={styles.recommendationText}>
+                          {item.text.includes(item.name) ? item.text : `${item.name}: ${item.text}`}
+                        </Text>
+                      ))}
                     </View>
-                    <Text style={styles.recommendationTitle}>Khuyến nghị lượng sử dụng nông dược</Text>
-                  </View>
-                  {recoItems.map((item, idx) => (
-                    <Text key={idx} style={styles.recommendationText}>
-                      {item.text.includes(item.name) ? item.text : `${item.name}: ${item.text}`}
-                    </Text>
-                  ))}
-                </View>
-              );
-            })()}
+                  );
+                })()}
 
-            {/* Proof images */}
-            <View style={styles.materialSection}>
-              <View style={styles.sectionHeaderRow}>
-                <Feather name="image" size={15} color="#d97706" />
-                <Text style={[styles.sectionTitle, { color: '#b45309' }]}>
-                  Ảnh minh chứng tổng hợp ({proofImages.length} ảnh)
-                </Text>
-              </View>
-              {proofImages.length === 0 ? (
-                <View style={styles.emptyProofBox}>
-                  <Text style={styles.emptyProofText}>Chưa có ảnh minh chứng nào từ nhật ký hàng ngày</Text>
+                {/* Proof images */}
+                <View style={styles.materialSection}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Feather name="image" size={15} color="#d97706" />
+                    <Text style={[styles.sectionTitle, { color: '#b45309' }]}>
+                      Ảnh minh chứng tổng hợp ({proofImages.length} ảnh)
+                    </Text>
+                  </View>
+                  {proofImages.length === 0 ? (
+                    <View style={styles.emptyProofBox}>
+                      <Text style={styles.emptyProofText}>Chưa có ảnh minh chứng nào từ nhật ký hàng ngày</Text>
+                    </View>
+                  ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                      {proofImages.map((imgUrl, i) => (
+                        <Image key={i} source={{ uri: imgUrl }} style={styles.proofThumb} />
+                      ))}
+                    </ScrollView>
+                  )}
                 </View>
-              ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                  {proofImages.map((imgUrl, i) => (
-                    <Image key={i} source={{ uri: imgUrl }} style={styles.proofThumb} />
-                  ))}
-                </ScrollView>
-              )}
-            </View>
+              </>
+            )}
 
             {/* Summary description */}
             <View style={styles.descSection}>
@@ -475,7 +613,13 @@ export default function SummaryReportModal({ visible, task, history, onClose, on
                 value={summaryNote}
                 onChangeText={setSummaryNote}
                 editable={!isAlreadySubmitted}
-                placeholder={isAlreadySubmitted ? 'Chưa có mô tả tổng kết' : 'VD: Đã hoàn thành công việc phun nông dược theo kế hoạch, cây trồng phát triển tốt...'}
+                placeholder={
+                  isAlreadySubmitted
+                    ? 'Chưa có mô tả tổng kết'
+                    : isHarvest
+                    ? 'VD: Đã hoàn thành công việc thu hoạch theo kế hoạch, năng suất đạt yêu cầu...'
+                    : 'VD: Đã hoàn thành công việc phun nông dược theo kế hoạch, cây trồng phát triển tốt...'
+                }
                 placeholderTextColor="#94a3b8"
                 multiline
                 textAlignVertical="top"
@@ -544,6 +688,7 @@ const styles = StyleSheet.create({
   tableHeader:          { flexDirection: 'row', backgroundColor: '#15803d', paddingHorizontal: 12, paddingVertical: 10, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
   th:                   { fontSize: 11, fontWeight: '800', color: '#fff' },
   tableRow:             { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 11, borderWidth: 1, borderColor: '#e2e8f0', borderTopWidth: 0, backgroundColor: '#fff', alignItems: 'center' },
+  summaryRow:           { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 12, borderWidth: 1, borderColor: '#e2e8f0', borderTopWidth: 2, borderTopColor: '#cbd5e1', backgroundColor: '#f8fafc', alignItems: 'center', borderBottomLeftRadius: 8, borderBottomRightRadius: 8 },
   td:                   { fontSize: 13 },
   emptySubtext:         { fontSize: 13, color: '#94a3b8', fontWeight: '400' },
   emptyTableRow:        { paddingVertical: 14, paddingHorizontal: 12, borderWidth: 1, borderColor: '#e2e8f0', borderTopWidth: 0, alignItems: 'center', backgroundColor: '#fff', borderBottomLeftRadius: 8, borderBottomRightRadius: 8 },
@@ -567,3 +712,4 @@ const styles = StyleSheet.create({
   submitBtnWarning:     { backgroundColor: '#d97706' },
   submitBtnText:        { fontSize: 14, fontWeight: '800', color: '#fff' },
 });
+
