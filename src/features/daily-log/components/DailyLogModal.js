@@ -772,11 +772,31 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved, o
     const baseRemainingArea = Math.max(0, plotArea - historyUsedArea);
     const currentRemaining = Math.max(0, baseRemainingArea - enteredArea);
 
+    const getDosageRate = (mat) => {
+      const rawDosage = valueOf(
+        mat.dosage,
+        mat.recommendedDosage,
+        mat.dosageRate,
+        mat.standardDosage,
+        mat.rate,
+        mat.ratio,
+        mat.usageRate
+      );
+      if (rawDosage !== undefined && rawDosage !== null && rawDosage !== '') {
+        const num = Number(rawDosage);
+        if (!isNaN(num) && num > 0) return num;
+      }
+      return 1; // Mặc định tỷ lệ 1: 10 m2 -> 10 kg, 100 m2 -> 100 kg
+    };
+
+    const dosageRate = getDosageRate(item);
+    const recommendedQuantity = enteredArea > 0 ? enteredArea * dosageRate : 0;
+
     return (
       <View key={item.id} style={styles.materialCard}>
         <View style={styles.materialHeader}>
           <Text style={styles.materialName}>
-            <Text style={{ color: '#15803d', fontWeight: '800' }}>{type === 'fertilizer' ? `Loại ${index + 1}: ` : `Thuốc ${index + 1}: `}</Text>
+            <Text style={{ color: '#15803d', fontWeight: '800' }}>{`Loại ${index + 1}: `}</Text>
             {item.name}
           </Text>
           <TouchableOpacity onPress={() => removeMaterial(type, item.id)} hitSlop={8}>
@@ -822,16 +842,13 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved, o
           </View>
         </View>
 
-        {/* Khuyến nghị lượng nông dược real-time */}
-        {item.quantity && Number(item.quantity) > 0 && item.area && Number(item.area) > 0 ? (
+        {/* Khuyến nghị lượng nông dược real-time (tính toán tự động theo diện tích m2 nhập vào) */}
+        {type === 'pesticide' && enteredArea > 0 ? (
           <View style={styles.recommendationBox}>
-            <Feather name="info" size={14} color="#92400e" style={{ marginRight: 6, marginTop: 1 }} />
+            <Feather name="alert-circle" size={16} color="#92400e" style={{ marginRight: 8, marginTop: 2 }} />
             <View style={{ flex: 1 }}>
               <Text style={styles.recommendationTitle}>
-                {`Khuyến nghị lượng nông dược:`}
-              </Text>
-              <Text style={styles.recommendationText}>
-                {`${item.quantity} ${item.unit || (type === 'fertilizer' ? 'kg' : 'ml')} cho ${item.area} m2`}
+                {`Khuyến nghị lượng nông dược: ${formatNumber(recommendedQuantity)} ${item.unit || 'kg'} cho ${formatNumber(enteredArea)} m2`}
               </Text>
               <Text style={styles.recommendationNote}>
                 Tính theo liều lượng đã khai báo trong chi tiết nông dược.
@@ -1040,12 +1057,12 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved, o
               </View>
 
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Thuốc bảo vệ thực vật</Text>
+                <Text style={styles.sectionTitle}>Nông dược</Text>
                 {catalogErrors.pesticide ? <Text style={styles.warning}>{catalogErrors.pesticide}</Text> : null}
                 {renderMaterialRows('pesticide', pesticides)}
                 <TouchableOpacity style={styles.addButton} onPress={() => { Keyboard.dismiss(); setPickerType('pesticide'); }} disabled={loadingCatalogs}>
                   {loadingCatalogs ? <ActivityIndicator color="#15803d" /> : <Feather name="plus" size={18} color="#15803d" />}
-                  <Text style={styles.addButtonText}>Thêm thuốc BVTV</Text>
+                  <Text style={styles.addButtonText}>Thêm nông dược</Text>
                 </TouchableOpacity>
               </View>
             </>
@@ -1251,7 +1268,7 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved, o
             <Pressable style={StyleSheet.absoluteFill} onPress={() => setPickerType(null)} />
             <View style={styles.pickerSheet}>
               <View style={styles.pickerHeader}>
-                <Text style={styles.pickerTitle}>{pickerType === 'fertilizer' ? 'Chọn phân bón' : 'Chọn thuốc BVTV'}</Text>
+                <Text style={styles.pickerTitle}>{pickerType === 'fertilizer' ? 'Chọn phân bón' : 'Chọn nông dược'}</Text>
                 <TouchableOpacity onPress={() => setPickerType(null)}>
                   <Feather name="x" size={22} color="#475569" />
                 </TouchableOpacity>
@@ -1287,7 +1304,7 @@ export default function DailyLogModal({ visible, task, plan, onClose, onSaved, o
             <View style={styles.unitPickerSheet}>
               <View style={styles.pickerHeader}>
                 <Text style={styles.pickerTitle}>
-                  Chọn đơn vị tính ({unitPickerTarget.type === 'fertilizer' ? 'Phân bón' : 'Thuốc BVTV'})
+                  Chọn đơn vị tính ({unitPickerTarget.type === 'fertilizer' ? 'Phân bón' : 'Nông dược'})
                 </Text>
                 <TouchableOpacity onPress={() => setUnitPickerTarget(null)}>
                   <Feather name="x" size={22} color="#475569" />
