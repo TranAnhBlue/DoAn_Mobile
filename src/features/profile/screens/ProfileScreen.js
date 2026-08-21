@@ -36,14 +36,7 @@ const MENU_ITEMS = [
     title: 'Đổi mật khẩu',
     subtitle: 'Bảo mật tài khoản của bạn',
     color: '#d97706',
-  },
-  {
-    route: 'Settings',
-    icon: 'settings',
-    title: 'Cài đặt',
-    subtitle: 'Thông báo và tùy chọn ứng dụng',
-    color: '#64748b',
-  },
+  }
 ];
 
 export default function ProfileScreen() {

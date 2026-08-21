@@ -103,6 +103,9 @@ export default function DailyLogModal({
   const activityType = String(
     task?.activityType || task?.type || task?.category || "",
   ).toUpperCase();
+  const taskType = String(
+    task?.taskType || task?.workType || "",
+  ).toUpperCase();
   const taskTitle = String(
     task?.taskName || task?.title || task?.name || "",
   ).toLowerCase();
@@ -113,6 +116,19 @@ export default function DailyLogModal({
     (taskTitle.includes("thu hoạch") &&
       !taskTitle.includes("sau thu hoạch") &&
       !taskTitle.includes("trước thu hoạch"));
+
+  // Hiển thị phân bón/nông dược dựa theo activityType & taskType
+  // NON_MATERIAL → ẩn cả hai; FERTILIZATION → chỉ phân bón;
+  // PESTICIDE_APPLICATION → chỉ nông dược; còn lại → hiện cả hai
+  const isNonMaterial = taskType === "NON_MATERIAL";
+  const showFertilizer =
+    !isHarvest &&
+    !isNonMaterial &&
+    activityType !== "PESTICIDE_APPLICATION";
+  const showPesticide =
+    !isHarvest &&
+    !isNonMaterial &&
+    activityType !== "FERTILIZATION";
 
   const totalPlanArea = Number(
     valueOf(
@@ -1416,55 +1432,56 @@ export default function DailyLogModal({
             </View>
           ) : null}
 
-          {/* Phân bón & Thuốc BVTV: ẩn khi task Thu hoạch (HARVESTING) */}
-          {!isHarvest ? (
-            <>
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Phân bón</Text>
-                {catalogErrors.fertilizer ? (
-                  <Text style={styles.warning}>{catalogErrors.fertilizer}</Text>
-                ) : null}
-                {renderMaterialRows("fertilizer", fertilizers)}
-                <TouchableOpacity
-                  style={styles.addButton}
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    setPickerType("fertilizer");
-                  }}
-                  disabled={loadingCatalogs}
-                >
-                  {loadingCatalogs ? (
-                    <ActivityIndicator color="#15803d" />
-                  ) : (
-                    <Feather name="plus" size={18} color="#15803d" />
-                  )}
-                  <Text style={styles.addButtonText}>Thêm phân bón</Text>
-                </TouchableOpacity>
-              </View>
+          {/* Phân bón: hiện khi không phải HARVESTING, NON_MATERIAL, hoặc PESTICIDE_APPLICATION */}
+          {showFertilizer ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Phân bón</Text>
+              {catalogErrors.fertilizer ? (
+                <Text style={styles.warning}>{catalogErrors.fertilizer}</Text>
+              ) : null}
+              {renderMaterialRows("fertilizer", fertilizers)}
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setPickerType("fertilizer");
+                }}
+                disabled={loadingCatalogs}
+              >
+                {loadingCatalogs ? (
+                  <ActivityIndicator color="#15803d" />
+                ) : (
+                  <Feather name="plus" size={18} color="#15803d" />
+                )}
+                <Text style={styles.addButtonText}>Thêm phân bón</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Nông dược</Text>
-                {catalogErrors.pesticide ? (
-                  <Text style={styles.warning}>{catalogErrors.pesticide}</Text>
-                ) : null}
-                {renderMaterialRows("pesticide", pesticides)}
-                <TouchableOpacity
-                  style={styles.addButton}
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    setPickerType("pesticide");
-                  }}
-                  disabled={loadingCatalogs}
-                >
-                  {loadingCatalogs ? (
-                    <ActivityIndicator color="#15803d" />
-                  ) : (
-                    <Feather name="plus" size={18} color="#15803d" />
-                  )}
-                  <Text style={styles.addButtonText}>Thêm nông dược</Text>
-                </TouchableOpacity>
-              </View>
-            </>
+          {/* Nông dược: hiện khi không phải HARVESTING, NON_MATERIAL, hoặc FERTILIZATION */}
+          {showPesticide ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Nông dược</Text>
+              {catalogErrors.pesticide ? (
+                <Text style={styles.warning}>{catalogErrors.pesticide}</Text>
+              ) : null}
+              {renderMaterialRows("pesticide", pesticides)}
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setPickerType("pesticide");
+                }}
+                disabled={loadingCatalogs}
+              >
+                {loadingCatalogs ? (
+                  <ActivityIndicator color="#15803d" />
+                ) : (
+                  <Feather name="plus" size={18} color="#15803d" />
+                )}
+                <Text style={styles.addButtonText}>Thêm nông dược</Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
 
           <View style={styles.section}>
